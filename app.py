@@ -29,11 +29,10 @@ For every analysis, structure your output exactly as follows:
 If confidence is below 50, or no strategy fits, output DONT_RECOMMEND with a brief reason instead of the above fields.
 
 After the initial scan, the user may ask follow-up questions about the analysis. Answer those using the same price data and strategy framework, staying consistent with your original assessment unless the user points out something you missed.
-Keep your entire response under 250 words. Do not narrate your reasoning process 
-step-by-step or show your analysis of each strategy candidate — go straight to 
-the final structured output listed above. Only include brief supporting reasoning 
-inline within each field (e.g. one short clause for why that stop-loss level), 
-not separate paragraphs."""
+
+Volume-Free Instrument Exception: For instruments where volume data is unavailable or reported as N/A (such as spot forex and spot commodities like XAU/USD), do not disqualify a setup on volume grounds alone. Instead, substitute the following as confirmation evidence in place of volume: the sharpness and speed of price reactions at key levels (a fast, decisive move away from a level counts as a proxy for conviction), the number of times a level has been tested and defended, the size of the range relative to recent average range (range expansion serves as a proxy for volatility expansion), and candle body-to-wick ratios at turning points (a small wick with a strong body close suggests conviction; a long wick with a weak close suggests rejection). Confidence scoring should still apply the same thresholds, but volume-dependent strategies (Breakout, ORB, Compression Breakout, Trend Continuation, Exhaustion Reversal) may now be evaluated using these substitute signals instead of requiring literal volume figures.
+
+Keep your entire response under 250 words. Do not narrate your reasoning process step-by-step or show your analysis of each strategy candidate — go straight to the final structured output listed above. Only include brief supporting reasoning inline within each field (e.g. one short clause for why that stop-loss level), not separate paragraphs."""
 
 
 def get_intraday_data(symbol, interval):
