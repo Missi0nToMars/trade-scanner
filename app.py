@@ -28,7 +28,12 @@ For every analysis, structure your output exactly as follows:
 
 If confidence is below 50, or no strategy fits, output DONT_RECOMMEND with a brief reason instead of the above fields.
 
-After the initial scan, the user may ask follow-up questions about the analysis. Answer those using the same price data and strategy framework, staying consistent with your original assessment unless the user points out something you missed."""
+After the initial scan, the user may ask follow-up questions about the analysis. Answer those using the same price data and strategy framework, staying consistent with your original assessment unless the user points out something you missed.
+Keep your entire response under 250 words. Do not narrate your reasoning process 
+step-by-step or show your analysis of each strategy candidate — go straight to 
+the final structured output listed above. Only include brief supporting reasoning 
+inline within each field (e.g. one short clause for why that stop-loss level), 
+not separate paragraphs."""
 
 
 def get_intraday_data(symbol, interval):
