@@ -32,6 +32,8 @@ After the initial scan, the user may ask follow-up questions about the analysis.
 
 Volume-Free Instrument Exception: For instruments where volume data is unavailable or reported as N/A (such as spot forex and spot commodities like XAU/USD), do not disqualify a setup on volume grounds alone. Instead, substitute the following as confirmation evidence in place of volume: the sharpness and speed of price reactions at key levels (a fast, decisive move away from a level counts as a proxy for conviction), the number of times a level has been tested and defended, the size of the range relative to recent average range (range expansion serves as a proxy for volatility expansion), and candle body-to-wick ratios at turning points (a small wick with a strong body close suggests conviction; a long wick with a weak close suggests rejection). Confidence scoring should still apply the same thresholds, but volume-dependent strategies (Breakout, ORB, Compression Breakout, Trend Continuation, Exhaustion Reversal) may now be evaluated using these substitute signals instead of requiring literal volume figures.
 
+Higher Timeframe Context: When daily candle data is provided alongside intraday data, use it to judge where the current intraday range sits relative to the broader trend, recent swing highs/lows, and overall market structure. Weight setups more favorably when the intraday signal aligns with the daily trend direction, and more cautiously when it conflicts with it (e.g. a bullish intraday setup appearing during a daily downtrend warrants a lower confidence score or added caution in the risk assessment).
+
 Keep your entire response under 600 words. Do not narrate your reasoning process step-by-step or show your analysis of each strategy candidate — go straight to the final structured output listed above. Only include brief supporting reasoning inline within each field (e.g. one short clause for why that stop-loss level), not separate paragraphs."""
 
 
@@ -40,7 +42,7 @@ def get_intraday_data(symbol, interval):
     params = {
         "symbol": symbol,
         "interval": interval,
-        "outputsize": 40,
+        "outputsize": 100,
         "apikey": TWELVE_DATA_KEY,
     }
     response = requests.get(url, params=params)
@@ -61,6 +63,34 @@ def get_intraday_data(symbol, interval):
             "volume": candle.get("volume", "N/A"),
         })
     return summary, None
+
+
+def get_daily_context(symbol):
+    """Pull recent daily candles for higher-timeframe context."""
+    url = "https://api.twelvedata.com/time_series"
+    params = {
+        "symbol": symbol,
+        "interval": "1day",
+        "outputsize": 20,
+        "apikey": TWELVE_DATA_KEY,
+    }
+    response = requests.get(url, params=params)
+    data = response.json()
+
+    if "values" not in data:
+        return None
+
+    candles = list(reversed(data["values"]))
+    summary = []
+    for candle in candles:
+        summary.append({
+            "date": candle["datetime"],
+            "open": candle["open"],
+            "high": candle["high"],
+            "low": candle["low"],
+            "close": candle["close"],
+        })
+    return summary
 
 
 def call_claude(messages):
@@ -115,15 +145,26 @@ if run_scan:
         st.error(f"Could not fetch price data: {error}")
     else:
         price_data_text = json.dumps(price_data, indent=2)
+
+        with st.spinner("Fetching daily context..."):
+            daily_data = get_daily_context(symbol)
+
+        daily_context_text = (
+            f"\n\nHigher timeframe context — last 20 daily candles:\n{json.dumps(daily_data, indent=2)}"
+            if daily_data else "\n\n(Daily context unavailable for this symbol.)"
+        )
+
         st.session_state.conversation = [
             {
                 "role": "user",
                 "content": (
                     f"Here is {symbol} price data at {interval} candles, "
                     f"most recent {len(price_data)} candles, oldest to newest:\n\n"
-                    f"{price_data_text}\n\n"
+                    f"{price_data_text}"
+                    f"{daily_context_text}\n\n"
                     "Analyze this for a short-term trade using the exact "
-                    "output format specified."
+                    "output format specified. Use the daily context to judge "
+                    "where the intraday range sits relative to the broader trend."
                 ),
             }
         ]
