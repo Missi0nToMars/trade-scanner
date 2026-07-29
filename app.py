@@ -87,8 +87,8 @@ def call_claude(messages):
 
 # ---------------- UI starts here ----------------
 
-st.set_page_config(page_title="Trade Scanner", page_icon="📈", layout="centered")
-st.title("📈 Trade Scanner")
+st.set_page_config(page_title="MissionToMars", page_icon="📈", layout="centered")
+st.title("📈 MissionToMars")
 st.caption("Short-term technical analysis powered by Claude")
 
 # Keep conversation history across reruns within a session
