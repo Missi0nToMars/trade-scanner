@@ -270,7 +270,6 @@ with tab_auto:
             st.rerun()
 
     status = st.empty()
-    signals_container = st.container()
 
     if st.session_state.auto_scanning:
         status.success(f"Scanning {st.session_state.auto_symbol} — tab must stay open to keep checking.")
@@ -301,17 +300,19 @@ with tab_auto:
                                 })
             st.session_state.last_auto_scan = time.time()
 
-        # Show a lightweight countdown and re-check
+    # Render signals BEFORE the rerun trigger below, so new signals actually show up
+    if st.session_state.signals:
+        st.subheader("Signals found")
+        for sig in st.session_state.signals:
+            with st.expander(f"{sig['symbol']} — {sig['time']}"):
+                st.text(sig["text"])
+    else:
+        st.caption("No signals above the confidence threshold yet.")
+
+    # Trigger the next check — this happens LAST so everything above has
+    # already rendered on screen before the page restarts
+    if st.session_state.auto_scanning:
         remaining = int(SCAN_INTERVAL_SECONDS - (time.time() - st.session_state.last_auto_scan))
         status.info(f"Watching {st.session_state.auto_symbol} — next check in ~{max(remaining, 0)}s")
         time.sleep(3)
         st.rerun()
-
-    with signals_container:
-        if st.session_state.signals:
-            st.subheader("Signals found")
-            for sig in st.session_state.signals:
-                with st.expander(f"{sig['symbol']} — {sig['time']}"):
-                    st.text(sig["text"])
-        else:
-            st.caption("No signals above the confidence threshold yet.")
