@@ -315,7 +315,3 @@ with tab_auto:
                     st.text(sig["text"])
         else:
             st.caption("No signals above the confidence threshold yet.")
-                with st.expander(f"{sig['symbol']} — {sig['time']}"):
-                    st.text(sig["text"])
-        else:
-            st.caption("No signals above the confidence threshold yet.")
