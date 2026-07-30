@@ -38,8 +38,6 @@ Keep your entire response under 600 words. Do not narrate your reasoning process
 
 
 def get_intraday_data(symbol, interval):
-    """Pull recent intraday candles, returned as a compact CSV string
-    (much cheaper in tokens than JSON, same information)."""
     url = "https://api.twelvedata.com/time_series"
     params = {
         "symbol": symbol,
@@ -54,17 +52,21 @@ def get_intraday_data(symbol, interval):
         return None, data
 
     candles = list(reversed(data["values"]))
-    lines = ["time,open,high,low,close,volume"]
+    summary = []
     for candle in candles:
-        lines.append(
-            f"{candle['datetime']},{candle['open']},{candle['high']},"
-            f"{candle['low']},{candle['close']},{candle.get('volume', 'N/A')}"
-        )
-    return "\n".join(lines), None
+        summary.append({
+            "time": candle["datetime"],
+            "open": candle["open"],
+            "high": candle["high"],
+            "low": candle["low"],
+            "close": candle["close"],
+            "volume": candle.get("volume", "N/A"),
+        })
+    return summary, None
 
 
 def get_daily_context(symbol):
-    """Pull recent daily candles for higher-timeframe context, as compact CSV."""
+    """Pull recent daily candles for higher-timeframe context."""
     url = "https://api.twelvedata.com/time_series"
     params = {
         "symbol": symbol,
@@ -79,13 +81,16 @@ def get_daily_context(symbol):
         return None
 
     candles = list(reversed(data["values"]))
-    lines = ["date,open,high,low,close"]
+    summary = []
     for candle in candles:
-        lines.append(
-            f"{candle['datetime']},{candle['open']},{candle['high']},"
-            f"{candle['low']},{candle['close']}"
-        )
-    return "\n".join(lines)
+        summary.append({
+            "date": candle["datetime"],
+            "open": candle["open"],
+            "high": candle["high"],
+            "low": candle["low"],
+            "close": candle["close"],
+        })
+    return summary
 
 
 def call_claude(messages):
@@ -139,23 +144,23 @@ if run_scan:
     if price_data is None:
         st.error(f"Could not fetch price data: {error}")
     else:
+        price_data_text = json.dumps(price_data, indent=2)
+
         with st.spinner("Fetching daily context..."):
             daily_data = get_daily_context(symbol)
 
         daily_context_text = (
-            f"\n\nHigher timeframe context — last 20 daily candles (CSV):\n{daily_data}"
+            f"\n\nHigher timeframe context — last 20 daily candles:\n{json.dumps(daily_data, indent=2)}"
             if daily_data else "\n\n(Daily context unavailable for this symbol.)"
         )
-
-        num_candles = price_data.count("\n")  # rows minus header
 
         st.session_state.conversation = [
             {
                 "role": "user",
                 "content": (
                     f"Here is {symbol} price data at {interval} candles, "
-                    f"most recent {num_candles} candles, oldest to newest, in CSV format:\n\n"
-                    f"{price_data}"
+                    f"most recent {len(price_data)} candles, oldest to newest:\n\n"
+                    f"{price_data_text}"
                     f"{daily_context_text}\n\n"
                     "Analyze this for a short-term trade using the exact "
                     "output format specified. Use the daily context to judge "
