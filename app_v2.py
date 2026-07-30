@@ -18,7 +18,7 @@ TWELVE_DATA_KEY = st.secrets["TWELVE_DATA_KEY"]
 CLAUDE_API_KEY = st.secrets["CLAUDE_API_KEY"]
 
 SCAN_INTERVAL_SECONDS = 5 * 60  # 5 minutes
-CONFIDENCE_THRESHOLD = 75
+DEFAULT_CONFIDENCE_THRESHOLD = 75
 
 # ---------------- Full strategy prompt (used for manual scans) ----------------
 
@@ -174,6 +174,8 @@ if "signals" not in st.session_state:
     st.session_state.signals = []  # list of dicts: {time, symbol, text}
 if "auto_symbol" not in st.session_state:
     st.session_state.auto_symbol = "AAPL"
+if "confidence_threshold" not in st.session_state:
+    st.session_state.confidence_threshold = DEFAULT_CONFIDENCE_THRESHOLD
 
 tab_manual, tab_auto = st.tabs(["Manual Scan", "Auto Scanning"])
 
@@ -238,10 +240,23 @@ with tab_manual:
 
 # ---------------- AUTO SCANNING TAB ----------------
 with tab_auto:
-    st.write(f"Checks every {SCAN_INTERVAL_SECONDS // 60} minutes. Only shows results with confidence {CONFIDENCE_THRESHOLD}+.")
+    st.write(f"Checks every {SCAN_INTERVAL_SECONDS // 60} minutes.")
 
-    auto_symbol = st.text_input("Symbol to watch", value=st.session_state.auto_symbol, key="auto_symbol_input")
-    st.session_state.auto_symbol = auto_symbol
+    col_symbol, col_threshold = st.columns(2)
+    with col_symbol:
+        auto_symbol = st.text_input("Symbol to watch", value=st.session_state.auto_symbol, key="auto_symbol_input")
+        st.session_state.auto_symbol = auto_symbol
+    with col_threshold:
+        threshold = st.slider(
+            "Minimum confidence to report",
+            min_value=50,
+            max_value=95,
+            value=st.session_state.confidence_threshold,
+            step=5,
+            disabled=st.session_state.auto_scanning,
+            help="Locked while scanning is active — stop scanning to change it.",
+        )
+        st.session_state.confidence_threshold = threshold
 
     col1, col2 = st.columns(2)
     with col1:
@@ -278,7 +293,7 @@ with tab_auto:
                         )
                         if scan_text:
                             confidence = parse_confidence(scan_text)
-                            if confidence is not None and confidence >= CONFIDENCE_THRESHOLD:
+                            if confidence is not None and confidence >= st.session_state.confidence_threshold:
                                 st.session_state.signals.insert(0, {
                                     "time": datetime.now().strftime("%H:%M:%S"),
                                     "symbol": st.session_state.auto_symbol,
@@ -296,6 +311,10 @@ with tab_auto:
         if st.session_state.signals:
             st.subheader("Signals found")
             for sig in st.session_state.signals:
+                with st.expander(f"{sig['symbol']} — {sig['time']}"):
+                    st.text(sig["text"])
+        else:
+            st.caption("No signals above the confidence threshold yet.")
                 with st.expander(f"{sig['symbol']} — {sig['time']}"):
                     st.text(sig["text"])
         else:
