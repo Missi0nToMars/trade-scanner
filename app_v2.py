@@ -1,5 +1,5 @@
 """
-Streamlit web app: clean UI for the stock trade analysis tool.
+Streamlit web app: manual trade analysis + automated background-style scanning.
 
 To run locally (optional, for testing): streamlit run app.py
 To deploy: push this to GitHub, then deploy on share.streamlit.io
@@ -9,12 +9,20 @@ API keys go in Streamlit's Secrets manager, NOT in this file.
 import streamlit as st
 import requests
 import json
+import time
+import re
+from datetime import datetime
 
-# ---- API keys pulled from Streamlit Secrets (set these in the Streamlit Cloud dashboard, not here) ----
+# ---- API keys pulled from Streamlit Secrets ----
 TWELVE_DATA_KEY = st.secrets["TWELVE_DATA_KEY"]
 CLAUDE_API_KEY = st.secrets["CLAUDE_API_KEY"]
 
-TRADING_STRATEGY = """You are an institutional-grade technical market analyst whose objective is to determine whether a high-probability trading opportunity exists, not to predict future price movement. Base every conclusion solely on objective market evidence and never assume missing information. Before evaluating any trade, identify the current market regime as Strong Uptrend, Strong Downtrend, Weak Trend, Range, Compression, Volatility Expansion, Low Volatility Consolidation, Distribution, Accumulation, or Reversal. Only evaluate strategies that statistically perform well in the detected regime. Never force a recommendation; if evidence is conflicting, incomplete, or weak, return DONT_RECOMMEND. Trend strategies should only be considered in trending markets, while mean reversion strategies should only be considered in ranging or low-volatility environments. Breakout strategies require both volatility and volume expansion, while reversal strategies require clear evidence of momentum exhaustion and structural confirmation. Every recommendation must include the detected strategy, market regime, confidence score, reasoning, invalidation conditions, and an overall risk assessment. Evaluate the following strategies during every analysis. Trend Pullback: identify established higher highs and higher lows (or lower highs and lower lows), wait for a controlled pullback into dynamic support such as VWAP, EMA, or previous structure, then require continuation confirmation before entry. Opening Range Breakout (ORB): only applicable near the market open after the opening range has formed; require a decisive breakout supported by expanding volume and no immediate rejection. Breakout: require price to close beyond major support or resistance with above-average volume, increasing volatility, and preferably a successful retest. Break and Retest: only after a confirmed breakout where price returns to the breakout level, respects it, and resumes the original direction. Trend Continuation: identify a strong trend followed by a brief consolidation before continuation with expanding momentum. Compression Breakout: identify prolonged low volatility, narrowing price range, and declining volume before a sudden expansion confirms direction. Failed Breakout: detect a breakout that immediately loses momentum, returns inside the previous range, and forms reversal confirmation before considering the opposite direction. Evaluate mean reversion and reversal strategies only when market conditions support them. Mean Reversion: identify significant extension from the market average combined with slowing momentum inside an established range, using factors such as RSI extremes, Bollinger Bands, or standard deviation while avoiding strong trending environments. VWAP Reversion: detect significant extensions away from VWAP followed by weakening momentum and declining participation. VWAP Bounce: in trending markets, identify pullbacks into VWAP that are respected before continuation. Support and Resistance Bounce: require repeated historical reactions at a level and a clear rejection before entry. Liquidity Sweep: identify price briefly taking previous highs or lows before immediately reversing back into range, indicating stop hunting. Fair Value Gap (FVG): identify impulsive moves creating price imbalances, then require retracement into the imbalance before continuation. Order Block: identify fresh institutional supply or demand zones where price revisits and rejects decisively. Volume Profile: evaluate reactions around the Point of Control (POC), High Volume Nodes (HVN), Low Volume Nodes (LVN), and Value Area High/Low, giving higher weight when these align with market structure. Exhaustion Reversal: identify extended directional moves showing divergence, climax volume, slowing momentum, and confirmed structural reversal before considering a counter-trend trade. Calculate a confidence score from 0-100 using only objective evidence. Increase confidence when multiple independent confirmations agree, including higher timeframe trend alignment, market structure, volume expansion, volatility expansion, VWAP agreement, support and resistance confluence, liquidity confirmation, volume profile confluence, healthy pullbacks, and strong continuation candles. Reduce confidence for conflicting signals, weak volume, poor follow-through, repeated tests of key levels, excessive volatility without direction, low liquidity, major scheduled news, or deteriorating market structure. Confidence should represent the statistical quality of the setup rather than certainty of outcome. Use the following scale: 95-100 Exceptional setup with near-perfect confluence; 90-94 Excellent setup with only minor conflicting evidence; 80-89 Good setup with strong statistical edge; 70-79 Moderate edge requiring disciplined risk management; 60-69 Weak edge requiring additional confirmation; 50-59 Very weak setup with significant uncertainty; below 50 automatically returns DONT_RECOMMEND. Also return DONT_RECOMMEND whenever no strategy appropriately matches the detected market regime, confirmation signals are insufficient, multiple strategies conflict without a clear winner, market structure is unclear, or the estimated risk-to-reward ratio is below 2:1 unless the strategy historically justifies otherwise. Never recommend a trade simply because price may move; only recommend trades when objective evidence strongly supports a defined strategy with measurable statistical edge.
+SCAN_INTERVAL_SECONDS = 5 * 60  # 5 minutes
+CONFIDENCE_THRESHOLD = 75
+
+# ---------------- Full strategy prompt (used for manual scans) ----------------
+
+TRADING_STRATEGY_FULL = """You are an institutional-grade technical market analyst whose objective is to determine whether a high-probability trading opportunity exists, not to predict future price movement. Base every conclusion solely on objective market evidence and never assume missing information. Before evaluating any trade, identify the current market regime as Strong Uptrend, Strong Downtrend, Weak Trend, Range, Compression, Volatility Expansion, Low Volatility Consolidation, Distribution, Accumulation, or Reversal. Only evaluate strategies that statistically perform well in the detected regime. Never force a recommendation; if evidence is conflicting, incomplete, or weak, return DONT_RECOMMEND. Trend strategies should only be considered in trending markets, while mean reversion strategies should only be considered in ranging or low-volatility environments. Breakout strategies require both volatility and volume expansion, while reversal strategies require clear evidence of momentum exhaustion and structural confirmation. Every recommendation must include the detected strategy, market regime, confidence score, reasoning, invalidation conditions, and an overall risk assessment. Evaluate the following strategies during every analysis. Trend Pullback: identify established higher highs and higher lows (or lower highs and lower lows), wait for a controlled pullback into dynamic support such as VWAP, EMA, or previous structure, then require continuation confirmation before entry. Opening Range Breakout (ORB): only applicable near the market open after the opening range has formed; require a decisive breakout supported by expanding volume and no immediate rejection. Breakout: require price to close beyond major support or resistance with above-average volume, increasing volatility, and preferably a successful retest. Break and Retest: only after a confirmed breakout where price returns to the breakout level, respects it, and resumes the original direction. Trend Continuation: identify a strong trend followed by a brief consolidation before continuation with expanding momentum. Compression Breakout: identify prolonged low volatility, narrowing price range, and declining volume before a sudden expansion confirms direction. Failed Breakout: detect a breakout that immediately loses momentum, returns inside the previous range, and forms reversal confirmation before considering the opposite direction. Evaluate mean reversion and reversal strategies only when market conditions support them. Mean Reversion: identify significant extension from the market average combined with slowing momentum inside an established range, using factors such as RSI extremes, Bollinger Bands, or standard deviation while avoiding strong trending environments. VWAP Reversion: detect significant extensions away from VWAP followed by weakening momentum and declining participation. VWAP Bounce: in trending markets, identify pullbacks into VWAP that are respected before continuation. Support and Resistance Bounce: require repeated historical reactions at a level and a clear rejection before entry. Liquidity Sweep: identify price briefly taking previous highs or lows before immediately reversing back into range, indicating stop hunting. Fair Value Gap (FVG): identify impulsive moves creating price imbalances, then require retracement into the imbalance before continuation. Order Block: identify fresh institutional supply or demand zones where price revisits and rejects decisively. Volume Profile: evaluate reactions around the Point of Control (POC), High Volume Nodes (HVN), Low Volume Nodes (LVN), and Value Area High/Low, giving higher weight when these align with market structure. Exhaustion Reversal: identify extended directional moves showing divergence, climax volume, slowing momentum, and confirmed structural reversal before considering a counter-trend trade. Calculate a confidence score from 0-100 using only objective evidence. Increase confidence when multiple independent confirmations agree, including higher timeframe trend alignment, market structure, volume expansion, volatility expansion, VWAP agreement, support and resistance confluence, liquidity confirmation, volume profile confluence, healthy pullbacks, and strong continuation candles. Reduce confidence for conflicting signals, weak volume, poor follow-through, repeated tests of key levels, excessive volatility without direction, low liquidity, major scheduled news, or deteriorating market structure. Confidence should represent the statistical quality of the setup rather than certainty of outcome. Use the following scale: 95-100 Exceptional setup with near-perfect confluence; 90-94 Excellent setup with only minor conflicting evidence; 80-89 Good setup with strong statistical edge; 70-79 Moderate edge requiring disciplined risk management; 60-69 Weak edge requiring additional confirmation; 50-59 Very weak setup with significant uncertainty; below 50 automatically returns DONT_RECOMMEND. Also return DONT_RECOMMEND whenever no strategy appropriately matches the detected market regime, confirmation signals are insufficient, multiple strategies conflict without a clear winner, market structure is unclear, or the estimated risk-to-reward ratio is below 2:1 unless the strategy historically justifies otherwise. Never recommend a trade simply because price may move; only recommend trades when objective evidence strongly supports a defined strategy with measurable statistical edge.
 
 For every analysis, structure your output exactly as follows:
 - Detected Strategy
@@ -36,13 +44,26 @@ Higher Timeframe Context: When daily candle data is provided alongside intraday 
 
 Keep your entire response under 600 words. Do not narrate your reasoning process step-by-step or show your analysis of each strategy candidate — go straight to the final structured output listed above. Only include brief supporting reasoning inline within each field (e.g. one short clause for why that stop-loss level), not separate paragraphs."""
 
+# ---------------- Trimmed strategy prompt (used for automated scanning) ----------------
 
-def get_intraday_data(symbol, interval):
+TRADING_STRATEGY_SCAN = """You are an institutional-grade technical market analyst. Apply the same strategy framework and confidence scoring rules as a full analysis (regime detection, strategy matching, volume-free instrument exception, higher timeframe context weighting), but output ONLY the following structured fields, nothing else, no extra commentary, no reasoning paragraphs:
+
+CONFIDENCE: <0-100>
+STRATEGY: <strategy name, or NONE if confidence is below 50>
+ENTRY: <price, or N/A>
+STOP_LOSS: <price, or N/A>
+TAKE_PROFIT: <price, or N/A>
+INVALIDATION: <one short line describing what proves the setup wrong, or N/A>
+
+Do not include a market regime explanation, risk assessment paragraph, or any narration. Just the six lines above, exactly as labeled."""
+
+
+def get_intraday_data(symbol, interval, size=100):
     url = "https://api.twelvedata.com/time_series"
     params = {
         "symbol": symbol,
         "interval": interval,
-        "outputsize": 100,
+        "outputsize": size,
         "apikey": TWELVE_DATA_KEY,
     }
     response = requests.get(url, params=params)
@@ -66,7 +87,6 @@ def get_intraday_data(symbol, interval):
 
 
 def get_daily_context(symbol):
-    """Pull recent daily candles for higher-timeframe context."""
     url = "https://api.twelvedata.com/time_series"
     params = {
         "symbol": symbol,
@@ -93,7 +113,7 @@ def get_daily_context(symbol):
     return summary
 
 
-def call_claude(messages):
+def call_claude(system_prompt, messages, max_tokens=1500):
     url = "https://api.anthropic.com/v1/messages"
     headers = {
         "x-api-key": CLAUDE_API_KEY,
@@ -102,8 +122,8 @@ def call_claude(messages):
     }
     body = {
         "model": "claude-sonnet-4-6",
-        "max_tokens": 1500,
-        "system": TRADING_STRATEGY,
+        "max_tokens": max_tokens,
+        "system": system_prompt,
         "messages": messages,
     }
     response = requests.post(url, headers=headers, json=body)
@@ -115,92 +135,168 @@ def call_claude(messages):
     return result["content"][0]["text"], None
 
 
+def build_data_message(symbol, interval, price_data, daily_data, instruction):
+    price_data_text = json.dumps(price_data, indent=2)
+    daily_context_text = (
+        f"\n\nHigher timeframe context — last 20 daily candles:\n{json.dumps(daily_data, indent=2)}"
+        if daily_data else "\n\n(Daily context unavailable for this symbol.)"
+    )
+    return (
+        f"Here is {symbol} price data at {interval} candles, "
+        f"most recent {len(price_data)} candles, oldest to newest:\n\n"
+        f"{price_data_text}"
+        f"{daily_context_text}\n\n"
+        f"{instruction}"
+    )
+
+
+def parse_confidence(scan_text):
+    match = re.search(r"CONFIDENCE:\s*(\d+)", scan_text)
+    return int(match.group(1)) if match else None
+
+
 # ---------------- UI starts here ----------------
 
 st.set_page_config(page_title="MissionToMars", page_icon="📈", layout="centered")
 st.title("📈 MissionToMars")
 st.caption("Short-term technical analysis powered by Claude")
 
-# Keep conversation history across reruns within a session
+# ---- Session state setup ----
 if "conversation" not in st.session_state:
     st.session_state.conversation = []
 if "scanned" not in st.session_state:
     st.session_state.scanned = False
+if "auto_scanning" not in st.session_state:
+    st.session_state.auto_scanning = False
+if "last_auto_scan" not in st.session_state:
+    st.session_state.last_auto_scan = 0
+if "signals" not in st.session_state:
+    st.session_state.signals = []  # list of dicts: {time, symbol, text}
+if "auto_symbol" not in st.session_state:
+    st.session_state.auto_symbol = "AAPL"
 
-with st.form("scan_form"):
+tab_manual, tab_auto = st.tabs(["Manual Scan", "Auto Scanning"])
+
+# ---------------- MANUAL SCAN TAB ----------------
+with tab_manual:
+    with st.form("scan_form"):
+        col1, col2 = st.columns(2)
+        with col1:
+            symbol = st.text_input("Stock symbol", value="AAPL")
+        with col2:
+            interval = st.selectbox("Interval", ["5min", "15min", "30min", "1h"], index=1)
+        run_scan = st.form_submit_button("Run Scan")
+
+    if run_scan:
+        with st.spinner(f"Fetching {interval} data for {symbol}..."):
+            price_data, error = get_intraday_data(symbol, interval)
+
+        if price_data is None:
+            st.error(f"Could not fetch price data: {error}")
+        else:
+            with st.spinner("Fetching daily context..."):
+                daily_data = get_daily_context(symbol)
+
+            instruction = (
+                "Analyze this for a short-term trade using the exact output "
+                "format specified. Use the daily context to judge where the "
+                "intraday range sits relative to the broader trend."
+            )
+            content = build_data_message(symbol, interval, price_data, daily_data, instruction)
+
+            st.session_state.conversation = [{"role": "user", "content": content}]
+
+            with st.spinner("Analyzing..."):
+                analysis, error = call_claude(TRADING_STRATEGY_FULL, st.session_state.conversation)
+
+            if analysis is None:
+                st.error(f"Claude API error: {error}")
+            else:
+                st.session_state.conversation.append({"role": "assistant", "content": analysis})
+                st.session_state.scanned = True
+
+    if st.session_state.scanned:
+        st.divider()
+        for i, msg in enumerate(st.session_state.conversation):
+            if msg["role"] == "assistant":
+                with st.chat_message("assistant"):
+                    st.markdown(msg["content"])
+            elif msg["role"] == "user" and i != 0:
+                with st.chat_message("user"):
+                    st.markdown(msg["content"])
+
+        question = st.chat_input("Ask a follow-up question about this analysis")
+        if question:
+            st.session_state.conversation.append({"role": "user", "content": question})
+            with st.spinner("Thinking..."):
+                answer, error = call_claude(TRADING_STRATEGY_FULL, st.session_state.conversation)
+            if answer:
+                st.session_state.conversation.append({"role": "assistant", "content": answer})
+                st.rerun()
+            else:
+                st.error(f"Claude API error: {error}")
+
+# ---------------- AUTO SCANNING TAB ----------------
+with tab_auto:
+    st.write(f"Checks every {SCAN_INTERVAL_SECONDS // 60} minutes. Only shows results with confidence {CONFIDENCE_THRESHOLD}+.")
+
+    auto_symbol = st.text_input("Symbol to watch", value=st.session_state.auto_symbol, key="auto_symbol_input")
+    st.session_state.auto_symbol = auto_symbol
+
     col1, col2 = st.columns(2)
     with col1:
-        symbol = st.text_input("Stock symbol", value="AAPL")
-    with col2:
-        interval = st.selectbox(
-            "Interval", ["5min", "15min", "30min", "1h"], index=1
-        )
-    run_scan = st.form_submit_button("Run Scan")
-
-if run_scan:
-    with st.spinner(f"Fetching {interval} data for {symbol}..."):
-        price_data, error = get_intraday_data(symbol, interval)
-
-    if price_data is None:
-        st.error(f"Could not fetch price data: {error}")
-    else:
-        price_data_text = json.dumps(price_data, indent=2)
-
-        with st.spinner("Fetching daily context..."):
-            daily_data = get_daily_context(symbol)
-
-        daily_context_text = (
-            f"\n\nHigher timeframe context — last 20 daily candles:\n{json.dumps(daily_data, indent=2)}"
-            if daily_data else "\n\n(Daily context unavailable for this symbol.)"
-        )
-
-        st.session_state.conversation = [
-            {
-                "role": "user",
-                "content": (
-                    f"Here is {symbol} price data at {interval} candles, "
-                    f"most recent {len(price_data)} candles, oldest to newest:\n\n"
-                    f"{price_data_text}"
-                    f"{daily_context_text}\n\n"
-                    "Analyze this for a short-term trade using the exact "
-                    "output format specified. Use the daily context to judge "
-                    "where the intraday range sits relative to the broader trend."
-                ),
-            }
-        ]
-        with st.spinner("Analyzing..."):
-            analysis, error = call_claude(st.session_state.conversation)
-
-        if analysis is None:
-            st.error(f"Claude API error: {error}")
-        else:
-            st.session_state.conversation.append(
-                {"role": "assistant", "content": analysis}
-            )
-            st.session_state.scanned = True
-
-# Show the conversation so far (scan result + any follow-ups)
-if st.session_state.scanned:
-    st.divider()
-    for msg in st.session_state.conversation:
-        if msg["role"] == "assistant":
-            with st.chat_message("assistant"):
-                st.markdown(msg["content"])
-        elif msg["role"] == "user" and st.session_state.conversation.index(msg) != 0:
-            # Skip showing the first message (the raw data dump), show only
-            # actual follow-up questions the user typed
-            with st.chat_message("user"):
-                st.markdown(msg["content"])
-
-    question = st.chat_input("Ask a follow-up question about this analysis")
-    if question:
-        st.session_state.conversation.append({"role": "user", "content": question})
-        with st.spinner("Thinking..."):
-            answer, error = call_claude(st.session_state.conversation)
-        if answer:
-            st.session_state.conversation.append(
-                {"role": "assistant", "content": answer}
-            )
+        if st.button("Start Scanning", disabled=st.session_state.auto_scanning):
+            st.session_state.auto_scanning = True
+            st.session_state.last_auto_scan = 0  # force an immediate check
             st.rerun()
+    with col2:
+        if st.button("Stop Scanning", disabled=not st.session_state.auto_scanning):
+            st.session_state.auto_scanning = False
+            st.rerun()
+
+    status = st.empty()
+    signals_container = st.container()
+
+    if st.session_state.auto_scanning:
+        status.success(f"Scanning {st.session_state.auto_symbol} — tab must stay open to keep checking.")
+
+        now = time.time()
+        seconds_since_last = now - st.session_state.last_auto_scan
+
+        if seconds_since_last >= SCAN_INTERVAL_SECONDS:
+            with status:
+                with st.spinner(f"Checking {st.session_state.auto_symbol}..."):
+                    price_data, error = get_intraday_data(st.session_state.auto_symbol, "15min")
+                    if price_data:
+                        daily_data = get_daily_context(st.session_state.auto_symbol)
+                        instruction = "Give a scan reading in the exact trimmed format specified."
+                        content = build_data_message(
+                            st.session_state.auto_symbol, "15min", price_data, daily_data, instruction
+                        )
+                        scan_text, error = call_claude(
+                            TRADING_STRATEGY_SCAN, [{"role": "user", "content": content}], max_tokens=200
+                        )
+                        if scan_text:
+                            confidence = parse_confidence(scan_text)
+                            if confidence is not None and confidence >= CONFIDENCE_THRESHOLD:
+                                st.session_state.signals.insert(0, {
+                                    "time": datetime.now().strftime("%H:%M:%S"),
+                                    "symbol": st.session_state.auto_symbol,
+                                    "text": scan_text,
+                                })
+            st.session_state.last_auto_scan = time.time()
+
+        # Show a lightweight countdown and re-check
+        remaining = int(SCAN_INTERVAL_SECONDS - (time.time() - st.session_state.last_auto_scan))
+        status.info(f"Watching {st.session_state.auto_symbol} — next check in ~{max(remaining, 0)}s")
+        time.sleep(3)
+        st.rerun()
+
+    with signals_container:
+        if st.session_state.signals:
+            st.subheader("Signals found")
+            for sig in st.session_state.signals:
+                with st.expander(f"{sig['symbol']} — {sig['time']}"):
+                    st.text(sig["text"])
         else:
-            st.error(f"Claude API error: {error}")
+            st.caption("No signals above the confidence threshold yet.")
