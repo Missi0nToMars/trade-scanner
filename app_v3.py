@@ -246,6 +246,26 @@ h1 {
 hr, [data-testid="stDivider"] {
     border-color: #2A3050 !important;
 }
+
+@keyframes pulse-dot {
+    0% { opacity: 1; box-shadow: 0 0 0 0 rgba(95, 191, 119, 0.5); }
+    70% { opacity: 0.6; box-shadow: 0 0 0 6px rgba(95, 191, 119, 0); }
+    100% { opacity: 1; box-shadow: 0 0 0 0 rgba(95, 191, 119, 0); }
+}
+.live-dot {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background-color: #5FBF77;
+    margin-right: 8px;
+    animation: pulse-dot 1.8s infinite;
+    vertical-align: middle;
+}
+
+.stProgress > div > div {
+    background-color: #FFA630 !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -271,6 +291,10 @@ if "auto_symbol" not in st.session_state:
     st.session_state.auto_symbol = "AAPL"
 if "confidence_threshold" not in st.session_state:
     st.session_state.confidence_threshold = DEFAULT_CONFIDENCE_THRESHOLD
+if "last_price" not in st.session_state:
+    st.session_state.last_price = None
+if "prev_price" not in st.session_state:
+    st.session_state.prev_price = None
 
 tab_manual, tab_auto = st.tabs(["Manual Scan", "Auto Scanning"])
 
@@ -365,35 +389,57 @@ with tab_auto:
             st.rerun()
 
     status = st.empty()
+    metrics_row = st.empty()
 
     if st.session_state.auto_scanning:
-        status.success(f"Scanning {st.session_state.auto_symbol} — tab must stay open to keep checking.")
+        status.markdown(
+            f"<span class='live-dot'></span>"
+            f"<span style='font-family:\"IBM Plex Mono\", monospace; color:#5FBF77;'>"
+            f"LIVE — watching {st.session_state.auto_symbol}</span>",
+            unsafe_allow_html=True,
+        )
 
         now = time.time()
         seconds_since_last = now - st.session_state.last_auto_scan
 
         if seconds_since_last >= SCAN_INTERVAL_SECONDS:
-            with status:
-                with st.spinner(f"Checking {st.session_state.auto_symbol}..."):
-                    price_data, error = get_intraday_data(st.session_state.auto_symbol, "15min")
-                    if price_data:
-                        daily_data = get_daily_context(st.session_state.auto_symbol)
-                        instruction = "Give a scan reading in the exact trimmed format specified."
-                        content = build_data_message(
-                            st.session_state.auto_symbol, "15min", price_data, daily_data, instruction
-                        )
-                        scan_text, error = call_claude(
-                            TRADING_STRATEGY_SCAN, [{"role": "user", "content": content}], max_tokens=200
-                        )
-                        if scan_text:
-                            confidence = parse_confidence(scan_text)
-                            if confidence is not None and confidence >= st.session_state.confidence_threshold:
-                                st.session_state.signals.insert(0, {
-                                    "time": datetime.now().strftime("%H:%M:%S"),
-                                    "symbol": st.session_state.auto_symbol,
-                                    "text": scan_text,
-                                })
+            with st.spinner(f"Checking {st.session_state.auto_symbol}..."):
+                price_data, error = get_intraday_data(st.session_state.auto_symbol, "15min")
+                if price_data:
+                    # Track price movement for the live metric
+                    latest_close = float(price_data[-1]["close"])
+                    st.session_state.prev_price = st.session_state.last_price
+                    st.session_state.last_price = latest_close
+
+                    daily_data = get_daily_context(st.session_state.auto_symbol)
+                    instruction = "Give a scan reading in the exact trimmed format specified."
+                    content = build_data_message(
+                        st.session_state.auto_symbol, "15min", price_data, daily_data, instruction
+                    )
+                    scan_text, error = call_claude(
+                        TRADING_STRATEGY_SCAN, [{"role": "user", "content": content}], max_tokens=200
+                    )
+                    if scan_text:
+                        confidence = parse_confidence(scan_text)
+                        if confidence is not None and confidence >= st.session_state.confidence_threshold:
+                            st.session_state.signals.insert(0, {
+                                "time": datetime.now().strftime("%H:%M:%S"),
+                                "symbol": st.session_state.auto_symbol,
+                                "text": scan_text,
+                            })
             st.session_state.last_auto_scan = time.time()
+
+        # Live price metric
+        if st.session_state.last_price is not None:
+            delta = None
+            if st.session_state.prev_price is not None:
+                delta = st.session_state.last_price - st.session_state.prev_price
+            with metrics_row.container():
+                st.metric(
+                    label=f"{st.session_state.auto_symbol} — last checked price",
+                    value=f"{st.session_state.last_price:.8f}".rstrip("0").rstrip("."),
+                    delta=f"{delta:.8f}".rstrip("0").rstrip(".") if delta else None,
+                )
 
     # Render signals BEFORE the rerun trigger below, so new signals actually show up
     if st.session_state.signals:
@@ -434,7 +480,9 @@ with tab_auto:
     # Trigger the next check — this happens LAST so everything above has
     # already rendered on screen before the page restarts
     if st.session_state.auto_scanning:
-        remaining = int(SCAN_INTERVAL_SECONDS - (time.time() - st.session_state.last_auto_scan))
-        status.info(f"Watching {st.session_state.auto_symbol} — next check in ~{max(remaining, 0)}s")
+        elapsed = time.time() - st.session_state.last_auto_scan
+        remaining = int(SCAN_INTERVAL_SECONDS - elapsed)
+        progress_fraction = min(max(elapsed / SCAN_INTERVAL_SECONDS, 0), 1)
+        st.progress(progress_fraction, text=f"Next check in ~{max(remaining, 0)}s")
         time.sleep(3)
         st.rerun()
