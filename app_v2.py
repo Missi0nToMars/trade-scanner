@@ -44,7 +44,9 @@ Higher Timeframe Context: When daily candle data is provided alongside intraday 
 
 Keep your entire response under 600 words. Do not narrate your reasoning process step-by-step or show your analysis of each strategy candidate — go straight to the final structured output listed above. Only include brief supporting reasoning inline within each field (e.g. one short clause for why that stop-loss level), not separate paragraphs.
 
-Precision Warning for Low-Priced Instruments: When a price is below 0.01 (common in meme coins and micro-cap tokens), write every price value using scientific notation (e.g. 2.9257e-6) instead of long decimal strings, and double-check the exponent matches the actual price scale from the provided data before finalizing any entry, stop-loss, or take-profit figure. Never shift the decimal point when copying a price value from the input data into your output — verify each output price against the input data's actual magnitude before responding."""
+Precision Warning for Low-Priced Instruments: When a price is below 0.01 (common in meme coins and micro-cap tokens), write every price value using scientific notation (e.g. 2.9257e-6) instead of long decimal strings, and double-check the exponent matches the actual price scale from the provided data before finalizing any entry, stop-loss, or take-profit figure. Never shift the decimal point when copying a price value from the input data into your output — verify each output price against the input data's actual magnitude before responding.
+
+Time and Frequency Constraint: All trade ideas must be structured for a maximum hold time of 1.5 hours from entry, with take-profit targets realistically reachable within that window based on the instrument's recent volatility and typical move speed — not targets that assume a multi-hour or multi-day move. Additionally, be highly selective — the trader is aiming for roughly 3 well-considered trades per day, not a high-frequency stream of setups. Only recommend a trade when the setup is genuinely strong; if a marginal or mediocre setup exists, or if no plausible path to target exists within 1.5 hours, return DONT_RECOMMEND rather than lowering the bar. Favor quality and patience over quantity."""
 
 # ---------------- Trimmed strategy prompt (used for automated scanning) ----------------
 
@@ -59,7 +61,10 @@ INVALIDATION: <one short line describing what proves the setup wrong, or N/A>
 
 Do not include a market regime explanation, risk assessment paragraph, or any narration. Just the six lines above, exactly as labeled.
 
-Precision Warning for Low-Priced Instruments: When a price is below 0.01 (common in meme coins and micro-cap tokens), write every price value using scientific notation (e.g. 2.9257e-6) instead of long decimal strings, and double-check the exponent matches the actual price scale from the provided data before finalizing any entry, stop-loss, or take-profit figure. Never shift the decimal point when copying a price value from the input data into your output — verify each output price against the input data's actual magnitude before responding."""
+Precision Warning for Low-Priced Instruments: When a price is below 0.01 (common in meme coins and micro-cap tokens), write every price value using scientific notation (e.g. 2.9257e-6) instead of long decimal strings, and double-check the exponent matches the actual price scale from the provided data before finalizing any entry, stop-loss, or take-profit figure. Never shift the decimal point when copying a price value from the input data into your output — verify each output price against the input data's actual magnitude before responding.
+
+Time and Frequency Constraint: All trade ideas must be structured for a maximum hold time of 1.5 hours from entry, with take-profit targets realistically reachable within that window based on the instrument's recent volatility and typical move speed. Be highly selective — the trader is aiming for roughly 3 well-considered trades per day. Only report CONFIDENCE at 50+ when the setup is genuinely strong and reachable within 1.5 hours; otherwise report CONFIDENCE below 50 with STRATEGY: NONE."""
+
 
 def get_intraday_data(symbol, interval, size=100):
     url = "https://api.twelvedata.com/time_series"
