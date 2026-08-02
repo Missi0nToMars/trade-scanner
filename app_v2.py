@@ -42,7 +42,9 @@ Volume-Free Instrument Exception: For instruments where volume data is unavailab
 
 Higher Timeframe Context: When daily candle data is provided alongside intraday data, use it to judge where the current intraday range sits relative to the broader trend, recent swing highs/lows, and overall market structure. Weight setups more favorably when the intraday signal aligns with the daily trend direction, and more cautiously when it conflicts with it (e.g. a bullish intraday setup appearing during a daily downtrend warrants a lower confidence score or added caution in the risk assessment).
 
-Keep your entire response under 600 words. Do not narrate your reasoning process step-by-step or show your analysis of each strategy candidate — go straight to the final structured output listed above. Only include brief supporting reasoning inline within each field (e.g. one short clause for why that stop-loss level), not separate paragraphs."""
+Keep your entire response under 600 words. Do not narrate your reasoning process step-by-step or show your analysis of each strategy candidate — go straight to the final structured output listed above. Only include brief supporting reasoning inline within each field (e.g. one short clause for why that stop-loss level), not separate paragraphs.
+
+Precision Warning for Low-Priced Instruments: When a price is below 0.01 (common in meme coins and micro-cap tokens), write every price value using scientific notation (e.g. 2.9257e-6) instead of long decimal strings, and double-check the exponent matches the actual price scale from the provided data before finalizing any entry, stop-loss, or take-profit figure. Never shift the decimal point when copying a price value from the input data into your output — verify each output price against the input data's actual magnitude before responding."""
 
 # ---------------- Trimmed strategy prompt (used for automated scanning) ----------------
 
@@ -55,8 +57,9 @@ STOP_LOSS: <price, or N/A>
 TAKE_PROFIT: <price, or N/A>
 INVALIDATION: <one short line describing what proves the setup wrong, or N/A>
 
-Do not include a market regime explanation, risk assessment paragraph, or any narration. Just the six lines above, exactly as labeled."""
+Do not include a market regime explanation, risk assessment paragraph, or any narration. Just the six lines above, exactly as labeled.
 
+Precision Warning for Low-Priced Instruments: When a price is below 0.01 (common in meme coins and micro-cap tokens), write every price value using scientific notation (e.g. 2.9257e-6) instead of long decimal strings, and double-check the exponent matches the actual price scale from the provided data before finalizing any entry, stop-loss, or take-profit figure. Never shift the decimal point when copying a price value from the input data into your output — verify each output price against the input data's actual magnitude before responding."""
 
 def get_intraday_data(symbol, interval, size=100):
     url = "https://api.twelvedata.com/time_series"
