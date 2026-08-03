@@ -596,6 +596,6 @@ if st.session_state.show_chart:
         help="e.g. NASDAQ:AAPL, OANDA:XAUUSD, BINANCE:PEPEUSDT",
     )
     st.session_state.chart_symbol_override = override
-    render_tradingview_chart(override, height=750)
+    render_tradingview_chart(override, height=950)
 else:
     st.caption("Chart hidden — toggle on to load it again.")
