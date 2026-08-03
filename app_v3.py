@@ -172,9 +172,51 @@ def parse_confidence(scan_text):
     return None
 
 
+def guess_tradingview_symbol(symbol):
+    """Best-effort guess at a TradingView-formatted symbol (EXCHANGE:TICKER).
+    Not guaranteed correct — the chart symbol field lets the user override it."""
+    s = symbol.strip().upper()
+    if "/" in s:
+        base, quote = s.split("/", 1)
+        # Common metals/commodities on forex-style feeds
+        if base in ("XAU", "XAG"):
+            return f"OANDA:{base}{quote}"
+        # Otherwise assume crypto pair
+        return f"BINANCE:{base}{quote}T" if quote == "USD" else f"BINANCE:{base}{quote}"
+    # Plain ticker — assume a stock, default to NASDAQ (user can override if wrong exchange)
+    return f"NASDAQ:{s}"
+
+
+def render_tradingview_chart(tv_symbol, height=500):
+    """Embed a live TradingView chart widget for the given symbol."""
+    widget_html = f"""
+    <div class="tradingview-widget-container" style="height:{height}px;">
+      <div id="tradingview_chart"></div>
+      <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+      <script type="text/javascript">
+      new TradingView.widget({{
+        "autosize": true,
+        "symbol": "{tv_symbol}",
+        "interval": "15",
+        "timezone": "Etc/UTC",
+        "theme": "dark",
+        "style": "1",
+        "locale": "en",
+        "toolbar_bg": "#131829",
+        "enable_publishing": false,
+        "hide_top_toolbar": false,
+        "save_image": false,
+        "container_id": "tradingview_chart"
+      }});
+      </script>
+    </div>
+    """
+    st.components.v1.html(widget_html, height=height)
+
+
 # ---------------- UI starts here ----------------
 
-st.set_page_config(page_title="MissionToMars", page_icon="📈", layout="centered")
+st.set_page_config(page_title="MissionToMars", page_icon="📈", layout="wide")
 
 st.markdown("""
 <style>
@@ -306,8 +348,40 @@ if "prev_price" not in st.session_state:
     st.session_state.prev_price = None
 if "last_check_debug" not in st.session_state:
     st.session_state.last_check_debug = None  # holds raw text + any error from most recent check
+if "chart_symbol_override" not in st.session_state:
+    st.session_state.chart_symbol_override = ""
+if "show_chart" not in st.session_state:
+    st.session_state.show_chart = True
 
-tab_manual, tab_auto = st.tabs(["Manual Scan", "Auto Scanning"])
+main_col, chart_col = st.columns([3, 2])
+
+with chart_col:
+    header_col, toggle_col = st.columns([3, 1])
+    with header_col:
+        st.markdown("<h3>Live Chart</h3>", unsafe_allow_html=True)
+    with toggle_col:
+        st.session_state.show_chart = st.toggle(
+            "Show", value=st.session_state.show_chart, key="chart_toggle"
+        )
+
+    if st.session_state.show_chart:
+        # Default the chart to whichever symbol is currently active in auto-scan,
+        # falling back to AAPL if nothing set yet
+        default_symbol = st.session_state.auto_symbol or "AAPL"
+        guessed = guess_tradingview_symbol(default_symbol)
+        override = st.text_input(
+            "Chart symbol (TradingView format — adjust if wrong exchange)",
+            value=st.session_state.chart_symbol_override or guessed,
+            key="chart_symbol_input",
+            help="e.g. NASDAQ:AAPL, OANDA:XAUUSD, BINANCE:PEPEUSDT",
+        )
+        st.session_state.chart_symbol_override = override
+        render_tradingview_chart(override)
+    else:
+        st.caption("Chart hidden — toggle on to load it again.")
+
+with main_col:
+    tab_manual, tab_auto = st.tabs(["Manual Scan", "Auto Scanning"])
 
 # ---------------- MANUAL SCAN TAB ----------------
 with tab_manual:
