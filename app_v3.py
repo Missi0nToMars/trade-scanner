@@ -190,12 +190,13 @@ def guess_tradingview_symbol(symbol):
 def render_tradingview_chart(tv_symbol, height=500):
     """Embed a live TradingView chart widget for the given symbol."""
     widget_html = f"""
-    <div class="tradingview-widget-container" style="height:{height}px;">
-      <div id="tradingview_chart"></div>
+    <div class="tradingview-widget-container" style="height:100%; width:100%;">
+      <div id="tradingview_chart" style="height:100%; width:100%;"></div>
       <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
       <script type="text/javascript">
       new TradingView.widget({{
-        "autosize": true,
+        "width": "100%",
+        "height": {height},
         "symbol": "{tv_symbol}",
         "interval": "15",
         "timezone": "Etc/UTC",
