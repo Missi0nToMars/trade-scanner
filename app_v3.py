@@ -17,8 +17,10 @@ from datetime import datetime
 TWELVE_DATA_KEY = st.secrets["TWELVE_DATA_KEY"]
 CLAUDE_API_KEY = st.secrets["CLAUDE_API_KEY"]
 
-SCAN_INTERVAL_SECONDS = 5 * 60  # 5 minutes
+DEFAULT_SCAN_INTERVAL_MINUTES = 5
 DEFAULT_CONFIDENCE_THRESHOLD = 75
+
+INTERVAL_TO_MINUTES = {"1min": 1, "5min": 5, "15min": 15, "30min": 30, "1h": 60}
 
 # ---------------- Full strategy prompt (used for manual scans) ----------------
 
@@ -353,6 +355,10 @@ if "chart_symbol_override" not in st.session_state:
     st.session_state.chart_symbol_override = ""
 if "show_chart" not in st.session_state:
     st.session_state.show_chart = True
+if "auto_interval" not in st.session_state:
+    st.session_state.auto_interval = "15min"
+if "scan_interval_minutes" not in st.session_state:
+    st.session_state.scan_interval_minutes = DEFAULT_SCAN_INTERVAL_MINUTES
 
 tab_manual, tab_auto = st.tabs(["Manual Scan", "Auto Scanning"])
 
@@ -417,7 +423,7 @@ with tab_manual:
 
 # ---------------- AUTO SCANNING TAB ----------------
 with tab_auto:
-    st.write(f"Checks every {SCAN_INTERVAL_SECONDS // 60} minutes.")
+    st.write("Configure your scan below.")
 
     col_symbol, col_threshold = st.columns(2)
     with col_symbol:
@@ -434,6 +440,41 @@ with tab_auto:
             help="Locked while scanning is active — stop scanning to change it.",
         )
         st.session_state.confidence_threshold = threshold
+
+    col_interval, col_timer = st.columns(2)
+    with col_interval:
+        interval_options = ["1min", "5min", "15min", "30min", "1h"]
+        auto_interval = st.select_slider(
+            "Candle interval",
+            options=interval_options,
+            value=st.session_state.auto_interval,
+            disabled=st.session_state.auto_scanning,
+            help="Locked while scanning is active — stop scanning to change it.",
+        )
+        st.session_state.auto_interval = auto_interval
+    with col_timer:
+        scan_timer = st.slider(
+            "Check every (minutes)",
+            min_value=1,
+            max_value=60,
+            value=st.session_state.scan_interval_minutes,
+            step=1,
+            disabled=st.session_state.auto_scanning,
+            help="Locked while scanning is active — stop scanning to change it.",
+        )
+        st.session_state.scan_interval_minutes = scan_timer
+
+    # Helpful nudge if checking more often than candles actually close —
+    # those extra checks would just re-read the same unclosed candle.
+    interval_minutes = INTERVAL_TO_MINUTES.get(st.session_state.auto_interval, 15)
+    if st.session_state.scan_interval_minutes < interval_minutes:
+        st.caption(
+            f"⚠️ Checking every {st.session_state.scan_interval_minutes}min but candles are "
+            f"{st.session_state.auto_interval} — some checks will re-read the same candle. "
+            f"Matching the two avoids wasted calls."
+        )
+
+    st.write(f"Checks every {st.session_state.scan_interval_minutes} minute(s) using {st.session_state.auto_interval} candles.")
 
     col1, col2 = st.columns(2)
     with col1:
@@ -460,9 +501,10 @@ with tab_auto:
         now = time.time()
         seconds_since_last = now - st.session_state.last_auto_scan
 
-        if seconds_since_last >= SCAN_INTERVAL_SECONDS:
+        scan_interval_seconds = st.session_state.scan_interval_minutes * 60
+        if seconds_since_last >= scan_interval_seconds:
             with st.spinner(f"Checking {st.session_state.auto_symbol}..."):
-                price_data, error = get_intraday_data(st.session_state.auto_symbol, "15min")
+                price_data, error = get_intraday_data(st.session_state.auto_symbol, st.session_state.auto_interval)
                 if price_data is None:
                     st.session_state.last_check_debug = {
                         "time": datetime.now().strftime("%H:%M:%S"),
@@ -478,7 +520,7 @@ with tab_auto:
                     daily_data = get_daily_context(st.session_state.auto_symbol)
                     instruction = "Give a scan reading in the exact trimmed format specified."
                     content = build_data_message(
-                        st.session_state.auto_symbol, "15min", price_data, daily_data, instruction
+                        st.session_state.auto_symbol, st.session_state.auto_interval, price_data, daily_data, instruction
                     )
                     scan_text, error = call_claude(
                         TRADING_STRATEGY_SCAN, [{"role": "user", "content": content}], max_tokens=350
@@ -570,9 +612,10 @@ with tab_auto:
     # Trigger the next check — this happens LAST so everything above has
     # already rendered on screen before the page restarts
     if st.session_state.auto_scanning:
+        scan_interval_seconds = st.session_state.scan_interval_minutes * 60
         elapsed = time.time() - st.session_state.last_auto_scan
-        remaining = int(SCAN_INTERVAL_SECONDS - elapsed)
-        progress_fraction = min(max(elapsed / SCAN_INTERVAL_SECONDS, 0), 1)
+        remaining = int(scan_interval_seconds - elapsed)
+        progress_fraction = min(max(elapsed / scan_interval_seconds, 0), 1)
         st.progress(progress_fraction, text=f"Next check in ~{max(remaining, 0)}s")
         time.sleep(3)
         st.rerun()
