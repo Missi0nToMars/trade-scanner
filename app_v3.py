@@ -66,7 +66,7 @@ Precision Warning for Low-Priced Instruments: When a price is below 0.01 (common
 Time and Frequency Constraint: All trade ideas must be structured for a maximum hold time of 1.5 hours from entry, with take-profit targets realistically reachable within that window based on the instrument's recent volatility and typical move speed. Be highly selective — the trader is aiming for roughly 3 well-considered trades per day. Only report CONFIDENCE at 50+ when the setup is genuinely strong and reachable within 1.5 hours; otherwise report CONFIDENCE below 50 with STRATEGY: NONE."""
 
 
-def get_intraday_data(symbol, interval, size=100):
+def get_intraday_data(symbol, interval, size=50):
     url = "https://api.twelvedata.com/time_series"
     params = {
         "symbol": symbol,
