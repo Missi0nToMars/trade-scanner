@@ -353,35 +353,7 @@ if "chart_symbol_override" not in st.session_state:
 if "show_chart" not in st.session_state:
     st.session_state.show_chart = True
 
-main_col, chart_col = st.columns([3, 2])
-
-with chart_col:
-    header_col, toggle_col = st.columns([3, 1])
-    with header_col:
-        st.markdown("<h3>Live Chart</h3>", unsafe_allow_html=True)
-    with toggle_col:
-        st.session_state.show_chart = st.toggle(
-            "Show", value=st.session_state.show_chart, key="chart_toggle"
-        )
-
-    if st.session_state.show_chart:
-        # Default the chart to whichever symbol is currently active in auto-scan,
-        # falling back to AAPL if nothing set yet
-        default_symbol = st.session_state.auto_symbol or "AAPL"
-        guessed = guess_tradingview_symbol(default_symbol)
-        override = st.text_input(
-            "Chart symbol (TradingView format — adjust if wrong exchange)",
-            value=st.session_state.chart_symbol_override or guessed,
-            key="chart_symbol_input",
-            help="e.g. NASDAQ:AAPL, OANDA:XAUUSD, BINANCE:PEPEUSDT",
-        )
-        st.session_state.chart_symbol_override = override
-        render_tradingview_chart(override)
-    else:
-        st.caption("Chart hidden — toggle on to load it again.")
-
-with main_col:
-    tab_manual, tab_auto = st.tabs(["Manual Scan", "Auto Scanning"])
+tab_manual, tab_auto = st.tabs(["Manual Scan", "Auto Scanning"])
 
 # ---------------- MANUAL SCAN TAB ----------------
 with tab_manual:
@@ -603,3 +575,27 @@ with tab_auto:
         st.progress(progress_fraction, text=f"Next check in ~{max(remaining, 0)}s")
         time.sleep(3)
         st.rerun()
+
+# ---------------- LIVE CHART (full width, below everything) ----------------
+st.divider()
+header_col, toggle_col = st.columns([4, 1])
+with header_col:
+    st.markdown("<h3>Live Chart</h3>", unsafe_allow_html=True)
+with toggle_col:
+    st.session_state.show_chart = st.toggle(
+        "Show", value=st.session_state.show_chart, key="chart_toggle"
+    )
+
+if st.session_state.show_chart:
+    default_symbol = st.session_state.auto_symbol or "AAPL"
+    guessed = guess_tradingview_symbol(default_symbol)
+    override = st.text_input(
+        "Chart symbol (TradingView format — adjust if wrong exchange)",
+        value=st.session_state.chart_symbol_override or guessed,
+        key="chart_symbol_input",
+        help="e.g. NASDAQ:AAPL, OANDA:XAUUSD, BINANCE:PEPEUSDT",
+    )
+    st.session_state.chart_symbol_override = override
+    render_tradingview_chart(override, height=750)
+else:
+    st.caption("Chart hidden — toggle on to load it again.")
