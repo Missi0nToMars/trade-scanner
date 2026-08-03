@@ -159,8 +159,17 @@ def build_data_message(symbol, interval, price_data, daily_data, instruction):
 
 
 def parse_confidence(scan_text):
-    match = re.search(r"CONFIDENCE:\s*(\d+)", scan_text)
-    return int(match.group(1)) if match else None
+    if not scan_text:
+        return None
+    # Primary format: "CONFIDENCE: 72"
+    match = re.search(r"CONFIDENCE:\s*(\d+)", scan_text, re.IGNORECASE)
+    if match:
+        return int(match.group(1))
+    # Fallback: catches drift like "Confidence Score: 72/100" or "Confidence: 72"
+    match = re.search(r"Confidence\s*(?:Score)?:?\s*(\d+)", scan_text, re.IGNORECASE)
+    if match:
+        return int(match.group(1))
+    return None
 
 
 # ---------------- UI starts here ----------------
@@ -295,6 +304,8 @@ if "last_price" not in st.session_state:
     st.session_state.last_price = None
 if "prev_price" not in st.session_state:
     st.session_state.prev_price = None
+if "last_check_debug" not in st.session_state:
+    st.session_state.last_check_debug = None  # holds raw text + any error from most recent check
 
 tab_manual, tab_auto = st.tabs(["Manual Scan", "Auto Scanning"])
 
@@ -405,7 +416,13 @@ with tab_auto:
         if seconds_since_last >= SCAN_INTERVAL_SECONDS:
             with st.spinner(f"Checking {st.session_state.auto_symbol}..."):
                 price_data, error = get_intraday_data(st.session_state.auto_symbol, "15min")
-                if price_data:
+                if price_data is None:
+                    st.session_state.last_check_debug = {
+                        "time": datetime.now().strftime("%H:%M:%S"),
+                        "error": f"Price fetch failed: {error}",
+                        "confidence": None,
+                    }
+                else:
                     # Track price movement for the live metric
                     latest_close = float(price_data[-1]["close"])
                     st.session_state.prev_price = st.session_state.last_price
@@ -417,10 +434,22 @@ with tab_auto:
                         st.session_state.auto_symbol, "15min", price_data, daily_data, instruction
                     )
                     scan_text, error = call_claude(
-                        TRADING_STRATEGY_SCAN, [{"role": "user", "content": content}], max_tokens=200
+                        TRADING_STRATEGY_SCAN, [{"role": "user", "content": content}], max_tokens=350
                     )
-                    if scan_text:
+                    if scan_text is None:
+                        st.session_state.last_check_debug = {
+                            "time": datetime.now().strftime("%H:%M:%S"),
+                            "error": f"Claude API error: {error}",
+                            "confidence": None,
+                        }
+                    else:
                         confidence = parse_confidence(scan_text)
+                        st.session_state.last_check_debug = {
+                            "time": datetime.now().strftime("%H:%M:%S"),
+                            "error": None if confidence is not None else "Could not parse a confidence value from the response — see raw text below.",
+                            "confidence": confidence,
+                            "raw": scan_text,
+                        }
                         if confidence is not None and confidence >= st.session_state.confidence_threshold:
                             st.session_state.signals.insert(0, {
                                 "time": datetime.now().strftime("%H:%M:%S"),
@@ -439,6 +468,20 @@ with tab_auto:
                     label=f"{st.session_state.auto_symbol} — last checked price",
                     value=f"{st.session_state.last_price:.8f}".rstrip("0").rstrip("."),
                     delta=f"{delta:.8f}".rstrip("0").rstrip(".") if delta else None,
+                )
+
+        # Transparency: show what the last check actually returned, pass or fail
+        if st.session_state.last_check_debug:
+            dbg = st.session_state.last_check_debug
+            if dbg.get("error"):
+                st.warning(f"Last check ({dbg['time']}): {dbg['error']}")
+                if dbg.get("raw"):
+                    with st.expander("Raw response from last check"):
+                        st.text(dbg["raw"])
+            else:
+                st.caption(
+                    f"Last check ({dbg['time']}): confidence {dbg['confidence']} "
+                    f"— threshold is {st.session_state.confidence_threshold}"
                 )
 
     # Render signals BEFORE the rerun trigger below, so new signals actually show up
