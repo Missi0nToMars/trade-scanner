@@ -541,6 +541,7 @@ with tab_auto:
                         }
                         if confidence is not None and confidence >= st.session_state.confidence_threshold:
                             st.session_state.signals.insert(0, {
+                                "id": f"{datetime.now().timestamp()}",
                                 "time": datetime.now().strftime("%H:%M:%S"),
                                 "symbol": st.session_state.auto_symbol,
                                 "text": scan_text,
@@ -588,24 +589,35 @@ with tab_auto:
                 tier_color, tier_label = "#4FD1C5", "SIGNAL"
 
             body_html = sig["text"].replace("\n", "<br>")
-            st.markdown(
-                f"""
-                <div style='background-color:#131829; border-left:4px solid {tier_color};
-                            border-radius:4px; padding:14px 18px; margin-bottom:12px;'>
-                    <div style='display:flex; justify-content:space-between; align-items:center;
-                                font-family:"Space Grotesk", sans-serif; font-weight:600;
-                                color:{tier_color}; font-size:0.85rem; letter-spacing:0.05em;
-                                margin-bottom:8px;'>
-                        <span>{tier_label} — {sig['symbol']}</span>
-                        <span style='color:#7A8199; font-family:"IBM Plex Mono", monospace;
-                                     font-weight:400;'>{sig['time']}</span>
+
+            close_col, card_col = st.columns([0.05, 0.95])
+            with close_col:
+                st.markdown("<div style='margin-top:8px;'></div>", unsafe_allow_html=True)
+                if st.button("✕", key=f"close_{sig.get('id', sig['time'])}", help="Dismiss this signal"):
+                    st.session_state.signals = [
+                        s for s in st.session_state.signals
+                        if s.get("id", s["time"]) != sig.get("id", sig["time"])
+                    ]
+                    st.rerun()
+            with card_col:
+                st.markdown(
+                    f"""
+                    <div style='background-color:#131829; border-left:4px solid {tier_color};
+                                border-radius:4px; padding:14px 18px; margin-bottom:12px;'>
+                        <div style='display:flex; justify-content:space-between; align-items:center;
+                                    font-family:"Space Grotesk", sans-serif; font-weight:600;
+                                    color:{tier_color}; font-size:0.85rem; letter-spacing:0.05em;
+                                    margin-bottom:8px;'>
+                            <span>{tier_label} — {sig['symbol']}</span>
+                            <span style='color:#7A8199; font-family:"IBM Plex Mono", monospace;
+                                         font-weight:400;'>{sig['time']}</span>
+                        </div>
+                        <div style='font-family:"IBM Plex Mono", monospace; font-size:0.85rem;
+                                    color:#E8EAF0; line-height:1.6; white-space:pre-wrap;'>{body_html}</div>
                     </div>
-                    <div style='font-family:"IBM Plex Mono", monospace; font-size:0.85rem;
-                                color:#E8EAF0; line-height:1.6; white-space:pre-wrap;'>{body_html}</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+                    """,
+                    unsafe_allow_html=True,
+                )
     else:
         st.caption("No signals above the confidence threshold yet.")
 
