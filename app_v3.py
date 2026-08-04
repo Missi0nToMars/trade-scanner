@@ -598,7 +598,6 @@ with tab_auto:
                         s for s in st.session_state.signals
                         if s.get("id", s["time"]) != sig.get("id", sig["time"])
                     ]
-                    st.rerun()
             with card_col:
                 st.markdown(
                     f"""
