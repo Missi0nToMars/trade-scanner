@@ -189,6 +189,40 @@ def guess_tradingview_symbol(symbol):
     return f"NASDAQ:{s}"
 
 
+def render_countdown(remaining_seconds, total_seconds, height=60):
+    """Client-side ticking countdown — updates every second in the browser
+    without needing a Streamlit rerun, so the page doesn't visibly reload
+    just to move a progress bar."""
+    widget_html = f"""
+    <div style="font-family: 'IBM Plex Mono', monospace; color:#E8EAF0; padding:4px 0;">
+      <div id="countdown-text" style="margin-bottom:6px; font-size:0.85rem;"></div>
+      <div style="background-color:#2A3050; border-radius:4px; height:8px; overflow:hidden;">
+        <div id="countdown-bar" style="background-color:#FFA630; height:100%; width:0%; transition:width 1s linear;"></div>
+      </div>
+    </div>
+    <script>
+    let remaining = {remaining_seconds};
+    const total = {total_seconds};
+    const textEl = document.getElementById('countdown-text');
+    const barEl = document.getElementById('countdown-bar');
+    function update() {{
+      const pct = Math.max(0, Math.min(100, ((total - remaining) / total) * 100));
+      barEl.style.width = pct + '%';
+      textEl.textContent = 'Next check in ~' + Math.max(0, Math.round(remaining)) + 's';
+    }}
+    update();
+    const timer = setInterval(function() {{
+      remaining -= 1;
+      if (remaining <= 0) {{
+        clearInterval(timer);
+      }}
+      update();
+    }}, 1000);
+    </script>
+    """
+    st.components.v1.html(widget_html, height=height)
+
+
 def render_tradingview_chart(tv_symbol, height=500):
     """Embed a live TradingView chart widget for the given symbol."""
     widget_html = f"""
@@ -621,14 +655,21 @@ with tab_auto:
         st.caption("No signals above the confidence threshold yet.")
 
     # Trigger the next check — this happens LAST so everything above has
-    # already rendered on screen before the page restarts
+    # already rendered on screen before the page restarts.
+    # The countdown itself ticks smoothly client-side (JS), so the page
+    # only needs to actually reload periodically to check if it's time
+    # to run the next scan — not every few seconds just to move a bar.
     if st.session_state.auto_scanning:
         scan_interval_seconds = st.session_state.scan_interval_minutes * 60
         elapsed = time.time() - st.session_state.last_auto_scan
-        remaining = int(scan_interval_seconds - elapsed)
-        progress_fraction = min(max(elapsed / scan_interval_seconds, 0), 1)
-        st.progress(progress_fraction, text=f"Next check in ~{max(remaining, 0)}s")
-        time.sleep(3)
+        remaining = max(int(scan_interval_seconds - elapsed), 0)
+        render_countdown(remaining, scan_interval_seconds)
+
+        # Reload only every 20s (or sooner if the check is due within that
+        # window) — enough to still catch the scan on time without the
+        # page visibly refreshing every few seconds.
+        next_wake = min(20, remaining if remaining > 0 else 1)
+        time.sleep(next_wake)
         st.rerun()
 
 # ---------------- LIVE CHART (full width, below everything) ----------------
