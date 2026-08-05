@@ -21,6 +21,7 @@ DEFAULT_SCAN_INTERVAL_MINUTES = 5
 DEFAULT_CONFIDENCE_THRESHOLD = 75
 
 INTERVAL_TO_MINUTES = {"1min": 1, "5min": 5, "15min": 15, "30min": 30, "1h": 60}
+INTERVAL_TO_CANDLES = {"1min": 100, "5min": 60, "15min": 50, "30min": 40, "1h": 30}
 
 # ---------------- Full strategy prompt (used for manual scans) ----------------
 
@@ -416,7 +417,9 @@ with tab_manual:
 
     if run_scan:
         with st.spinner(f"Fetching {interval} data for {symbol}..."):
-            price_data, error = get_intraday_data(symbol, interval)
+            price_data, error = get_intraday_data(
+                symbol, interval, size=INTERVAL_TO_CANDLES.get(interval, 50)
+            )
 
         if price_data is None:
             st.error(f"Could not fetch price data: {error}")
@@ -546,7 +549,11 @@ with tab_auto:
         scan_interval_seconds = st.session_state.scan_interval_minutes * 60
         if seconds_since_last >= scan_interval_seconds:
             with st.spinner(f"Checking {st.session_state.auto_symbol}..."):
-                price_data, error = get_intraday_data(st.session_state.auto_symbol, st.session_state.auto_interval)
+                price_data, error = get_intraday_data(
+                    st.session_state.auto_symbol,
+                    st.session_state.auto_interval,
+                    size=INTERVAL_TO_CANDLES.get(st.session_state.auto_interval, 50),
+                )
                 if price_data is None:
                     st.session_state.last_check_debug = {
                         "time": datetime.now().strftime("%H:%M:%S"),
