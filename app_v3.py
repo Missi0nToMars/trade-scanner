@@ -41,7 +41,7 @@ Time and Frequency Constraint: All trade ideas must be structured for a maximum 
 
 Risk:Reward Verification: Before finalizing any recommendation, explicitly compute risk as |Entry − Stop Loss| and reward as |Take Profit − Entry|, then divide reward by risk to get the actual R:R ratio. State this calculation's inputs and result accurately — never state an R:R ratio without having correctly performed this division. If the computed ratio falls below 1.5:1, first check whether a more structurally sound stop-loss or take-profit level would genuinely produce 1.5:1 or better, and use those levels if so. Only decline on R:R grounds if no reasonable structural adjustment achieves 1.5:1 and the setup doesn't otherwise justify an exception per the framework above — do not discard an otherwise strong setup over this check alone if better levels are available. The one hard rule: never report an R:R number that your own math doesn't support.
 
-Confidence Score Calibration: Do not default to a habitual middle-range number. Build the score explicitly: list each confirming factor present (trend alignment, structure confluence, volume/proxy conviction, momentum, higher-timeframe agreement) and each detracting factor (conflicting signals, weak follow-through, proximity to resistance, choppiness), then derive the score from the actual count and strength of each — more confirmations with no major detractors should score notably higher (80s-90s), while few confirmations or several detractors should score notably lower (50s-low 60s). Before finalizing, explicitly check whether the evidence actually supports a score in the 40s, 80s, or 90s rather than defaulting toward the middle of the range. Perform this full calibration process every time, regardless of how the final answer will be formatted or how brief the required output is — a terse output format is never a reason to think less carefully or score more conservatively than the same setup would score in a full written analysis."""
+Confidence Score Calibration: Do not default to a habitual middle-range number. Build the score explicitly: list each confirming factor present (trend alignment, structure confluence, volume/proxy conviction, momentum, higher-timeframe agreement) and each detracting factor (conflicting signals, weak follow-through, proximity to resistance, choppiness), then derive the score from the actual count and strength of each — more confirmations with no major detractors should score notably higher (80s-90s), while few confirmations or several detractors should score notably lower (50s-low 60s). Before finalizing, explicitly check whether the evidence actually supports a score in the 40s, 80s, or 90s rather than defaulting toward the middle of the range."""
 
 # ---------------- Full prompt (manual scans): shared core + full written format ----------------
 
@@ -67,7 +67,7 @@ Keep your entire response under 600 words. Do not narrate your reasoning process
 
 TRADING_STRATEGY_SCAN = CORE_STRATEGY_FRAMEWORK + """
 
-Output ONLY the following six structured fields, nothing else, no extra commentary, no reasoning paragraphs, no market regime explanation, no risk assessment paragraph:
+Your response must contain ONLY the six structured fields below and absolutely nothing else. Do not write any heading, preamble, or section such as "Internal Analysis," "Market Regime Detection," "Strategy Evaluation," or similar — even if labeled as internal, draft, or "not printed in output." Any such text still counts as printed output and is strictly forbidden. Do the full calibration and verification silently, then write your very first character as the start of "CONFIDENCE:" — no text of any kind may appear before it.
 
 CONFIDENCE: <0-100>
 STRATEGY: <strategy name, or NONE if confidence is below 50>
@@ -584,7 +584,7 @@ with tab_auto:
                             st.session_state.auto_symbol, st.session_state.auto_interval, price_data, daily_data, instruction
                         )
                         scan_text, error = call_claude(
-                            TRADING_STRATEGY_SCAN, [{"role": "user", "content": content}], max_tokens=500
+                            TRADING_STRATEGY_SCAN, [{"role": "user", "content": content}], max_tokens=800
                         )
                         if scan_text is None:
                             st.session_state.last_check_debug = {
