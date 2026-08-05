@@ -69,6 +69,8 @@ INVALIDATION: <one short line describing what proves the setup wrong, or N/A>
 
 Do not include a market regime explanation, risk assessment paragraph, or any narration. Just the six lines above, exactly as labeled.
 
+Internal Reasoning Requirement: Before writing the six output lines, still mentally work through the full confirming-factor and detracting-factor analysis exactly as you would for a complete written report — trend alignment, structure confluence, momentum, higher-timeframe agreement, and any conflicting signals or weaknesses. Do this full analysis internally every time, even though only the final six lines get printed. Do not shortcut the reasoning just because the output format is brief — a terser output format is not a reason to think less carefully or score more conservatively than the same setup would score in a full written analysis.
+
 Precision Warning for Low-Priced Instruments: When a price is below 0.01 (common in meme coins and micro-cap tokens), write every price value using scientific notation (e.g. 2.9257e-6) instead of long decimal strings, and double-check the exponent matches the actual price scale from the provided data before finalizing any entry, stop-loss, or take-profit figure. Never shift the decimal point when copying a price value from the input data into your output — verify each output price against the input data's actual magnitude before responding.
 
 Time and Frequency Constraint: All trade ideas must be structured for a maximum hold time of 1.5 hours from entry, with take-profit targets realistically reachable within that window based on the instrument's recent volatility and typical move speed. Be highly selective — the trader is aiming for roughly 3 well-considered trades per day, but selectivity means only surfacing genuinely tradeable setups, not artificially requiring a higher confidence bar than the scoring scale itself defines. Use the exact same confidence scale as a full analysis: 50-59 very weak, 60-69 weak edge, 70-79 moderate edge requiring discipline, 80-89 good, 90+ excellent. Report CONFIDENCE below 50 with STRATEGY: NONE only when the evidence genuinely doesn't clear 50 on that scale — do not mentally round a legitimate 70-79 "moderate edge" setup down into NONE.
@@ -583,7 +585,7 @@ with tab_auto:
                             st.session_state.auto_symbol, st.session_state.auto_interval, price_data, daily_data, instruction
                         )
                         scan_text, error = call_claude(
-                            TRADING_STRATEGY_SCAN, [{"role": "user", "content": content}], max_tokens=350
+                            TRADING_STRATEGY_SCAN, [{"role": "user", "content": content}], max_tokens=500
                         )
                         if scan_text is None:
                             st.session_state.last_check_debug = {
