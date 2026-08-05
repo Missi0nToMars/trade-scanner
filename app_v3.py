@@ -206,7 +206,7 @@ def render_countdown(remaining_seconds, total_seconds, height=60):
     <div style="font-family: 'IBM Plex Mono', monospace; color:#E8EAF0; padding:4px 0;">
       <div id="countdown-text" style="margin-bottom:6px; font-size:0.85rem;"></div>
       <div style="background-color:#2A3050; border-radius:4px; height:8px; overflow:hidden;">
-        <div id="countdown-bar" style="background-color:#FFA630; height:100%; width:0%; transition:width 1s linear;"></div>
+        <div id="countdown-bar" style="background-color:#C9A24B; height:100%; width:0%; transition:width 1s linear;"></div>
       </div>
     </div>
     <script>
@@ -262,62 +262,64 @@ def render_tradingview_chart(tv_symbol, height=500):
 
 # ---------------- UI starts here ----------------
 
-st.set_page_config(page_title="MissionToMars", page_icon="📈", layout="wide")
+st.set_page_config(page_title="MissionToMars", page_icon="▪", layout="wide")
 
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Mono:wght@400;600&family=Inter:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
 html, body, [class*="css"] {
-    font-family: 'Inter', sans-serif;
+    font-family: 'IBM Plex Sans', sans-serif;
 }
 
 .stApp {
-    background: radial-gradient(circle at 20% 0%, #131829 0%, #0B0E1A 55%);
-    color: #E8EAF0;
+    background-color: #0B0E1A;
+    color: #E4E6ED;
 }
 
 h1, h2, h3 {
-    font-family: 'Space Grotesk', sans-serif !important;
-    letter-spacing: 0.02em;
+    font-family: 'IBM Plex Sans', sans-serif !important;
+    font-weight: 600 !important;
+    letter-spacing: -0.01em;
 }
 
 h1 {
     font-weight: 700 !important;
     color: #F5F6FA !important;
+    font-size: 1.7rem !important;
 }
 
 .stCaption, [data-testid="stCaptionContainer"] {
     color: #7A8199 !important;
-    font-family: 'IBM Plex Mono', monospace !important;
-    letter-spacing: 0.03em;
+    font-family: 'IBM Plex Sans', sans-serif !important;
+    letter-spacing: 0.01em;
 }
 
 /* Buttons */
 .stButton > button {
-    font-family: 'Space Grotesk', sans-serif;
-    font-weight: 600;
-    letter-spacing: 0.03em;
-    border-radius: 4px;
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    border-radius: 3px;
     border: 1px solid #2A3050;
     background-color: #131829;
-    color: #E8EAF0;
+    color: #E4E6ED;
     transition: border-color 0.15s ease;
 }
 .stButton > button:hover {
-    border-color: #FFA630;
-    color: #FFA630;
+    border-color: #C9A24B;
+    color: #C9A24B;
 }
 
 /* Tabs */
 .stTabs [data-baseweb="tab"] {
-    font-family: 'Space Grotesk', sans-serif;
-    font-weight: 600;
-    letter-spacing: 0.02em;
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-weight: 500;
+    letter-spacing: 0.01em;
     color: #7A8199;
 }
 .stTabs [aria-selected="true"] {
-    color: #FFA630 !important;
+    color: #C9A24B !important;
 }
 
 /* Text inputs and selects */
@@ -325,19 +327,19 @@ h1 {
     font-family: 'IBM Plex Mono', monospace;
     background-color: #131829 !important;
     border-color: #2A3050 !important;
-    color: #E8EAF0 !important;
+    color: #E4E6ED !important;
 }
 
 /* Slider */
 .stSlider [data-baseweb="slider"] {
-    color: #FFA630;
+    color: #C9A24B;
 }
 
 /* Expander (fallback, in case still used) */
 .streamlit-expanderHeader {
     font-family: 'IBM Plex Mono', monospace;
     background-color: #131829 !important;
-    border-radius: 4px;
+    border-radius: 3px;
 }
 
 hr, [data-testid="stDivider"] {
@@ -351,8 +353,8 @@ hr, [data-testid="stDivider"] {
 }
 .live-dot {
     display: inline-block;
-    width: 9px;
-    height: 9px;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
     background-color: #5FBF77;
     margin-right: 8px;
@@ -361,15 +363,18 @@ hr, [data-testid="stDivider"] {
 }
 
 .stProgress > div > div {
-    background-color: #FFA630 !important;
+    background-color: #C9A24B !important;
 }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("<h1 style='margin-bottom:0;'>📡 MissionToMars</h1>", unsafe_allow_html=True)
 st.markdown(
-    "<p style='font-family:IBM Plex Mono, monospace; color:#7A8199; "
-    "letter-spacing:0.05em; margin-top:0;'>SHORT-TERM SIGNAL CONSOLE — POWERED BY CLAUDE</p>",
+    "<div style='display:flex; align-items:baseline; gap:10px; "
+    "border-bottom:1px solid #2A3050; padding-bottom:10px; margin-bottom:4px;'>"
+    "<h1 style='margin:0;'>MissionToMars</h1>"
+    "<span style='font-family:IBM Plex Mono, monospace; color:#7A8199; "
+    "font-size:0.75rem; letter-spacing:0.02em;'>MARKET ANALYSIS TERMINAL</span>"
+    "</div>",
     unsafe_allow_html=True,
 )
 
@@ -633,7 +638,7 @@ with tab_auto:
             if confidence is not None and confidence >= 85:
                 tier_color, tier_label = "#5FBF77", "STRONG"
             elif confidence is not None and confidence >= 75:
-                tier_color, tier_label = "#FFA630", "MODERATE"
+                tier_color, tier_label = "#C9A24B", "MODERATE"
             else:
                 tier_color, tier_label = "#4FD1C5", "SIGNAL"
 
@@ -653,7 +658,7 @@ with tab_auto:
                     <div style='background-color:#131829; border-left:4px solid {tier_color};
                                 border-radius:4px; padding:14px 18px; margin-bottom:12px;'>
                         <div style='display:flex; justify-content:space-between; align-items:center;
-                                    font-family:"Space Grotesk", sans-serif; font-weight:600;
+                                    font-family:"IBM Plex Sans", sans-serif; font-weight:600;
                                     color:{tier_color}; font-size:0.85rem; letter-spacing:0.05em;
                                     margin-bottom:8px;'>
                             <span>{tier_label} — {sig['symbol']}</span>
