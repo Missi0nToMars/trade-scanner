@@ -22,10 +22,11 @@ DEFAULT_CONFIDENCE_THRESHOLD = 75
 
 INTERVAL_TO_MINUTES = {"1min": 1, "5min": 5, "15min": 15, "30min": 30, "1h": 60}
 INTERVAL_TO_CANDLES = {"1min": 100, "5min": 60, "15min": 50, "30min": 40, "1h": 30}
+INTERVAL_TO_TV_CODE = {"1min": "1", "5min": "5", "15min": "15", "30min": "30", "1h": "60"}
 
 # ---------------- Full strategy prompt (used for manual scans) ----------------
 
-TRADING_STRATEGY_FULL = """You are an institutional-grade technical market analyst whose objective is to determine whether a high-probability trading opportunity exists, not to predict future price movement. Base every conclusion solely on objective market evidence and never assume missing information. Before evaluating any trade, identify the current market regime as Strong Uptrend, Strong Downtrend, Weak Trend, Range, Compression, Volatility Expansion, Low Volatility Consolidation, Distribution, Accumulation, or Reversal. Only evaluate strategies that statistically perform well in the detected regime. Never force a recommendation; if evidence is conflicting, incomplete, or weak, return DONT_RECOMMEND. Trend strategies should only be considered in trending markets, while mean reversion strategies should only be considered in ranging or low-volatility environments. Breakout strategies require both volatility and volume expansion, while reversal strategies require clear evidence of momentum exhaustion and structural confirmation. Every recommendation must include the detected strategy, market regime, confidence score, reasoning, invalidation conditions, and an overall risk assessment. Evaluate the following strategies during every analysis. Trend Pullback: identify established higher highs and higher lows (or lower highs and lower lows), wait for a controlled pullback into dynamic support such as VWAP, EMA, or previous structure, then require continuation confirmation before entry. Opening Range Breakout (ORB): only applicable near the market open after the opening range has formed; require a decisive breakout supported by expanding volume and no immediate rejection. Breakout: require price to close beyond major support or resistance with above-average volume, increasing volatility, and preferably a successful retest. Break and Retest: only after a confirmed breakout where price returns to the breakout level, respects it, and resumes the original direction. Trend Continuation: identify a strong trend followed by a brief consolidation before continuation with expanding momentum. Compression Breakout: identify prolonged low volatility, narrowing price range, and declining volume before a sudden expansion confirms direction. Failed Breakout: detect a breakout that immediately loses momentum, returns inside the previous range, and forms reversal confirmation before considering the opposite direction. Evaluate mean reversion and reversal strategies only when market conditions support them. Mean Reversion: identify significant extension from the market average combined with slowing momentum inside an established range, using factors such as RSI extremes, Bollinger Bands, or standard deviation while avoiding strong trending environments. VWAP Reversion: detect significant extensions away from VWAP followed by weakening momentum and declining participation. VWAP Bounce: in trending markets, identify pullbacks into VWAP that are respected before continuation. Support and Resistance Bounce: require repeated historical reactions at a level and a clear rejection before entry. Liquidity Sweep: identify price briefly taking previous highs or lows before immediately reversing back into range, indicating stop hunting. Fair Value Gap (FVG): identify impulsive moves creating price imbalances, then require retracement into the imbalance before continuation. Order Block: identify fresh institutional supply or demand zones where price revisits and rejects decisively. Volume Profile: evaluate reactions around the Point of Control (POC), High Volume Nodes (HVN), Low Volume Nodes (LVN), and Value Area High/Low, giving higher weight when these align with market structure. Exhaustion Reversal: identify extended directional moves showing divergence, climax volume, slowing momentum, and confirmed structural reversal before considering a counter-trend trade. Calculate a confidence score from 0-100 using only objective evidence. Increase confidence when multiple independent confirmations agree, including higher timeframe trend alignment, market structure, volume expansion, volatility expansion, VWAP agreement, support and resistance confluence, liquidity confirmation, volume profile confluence, healthy pullbacks, and strong continuation candles. Reduce confidence for conflicting signals, weak volume, poor follow-through, repeated tests of key levels, excessive volatility without direction, low liquidity, major scheduled news, or deteriorating market structure. Confidence should represent the statistical quality of the setup rather than certainty of outcome. Use the following scale: 95-100 Exceptional setup with near-perfect confluence; 90-94 Excellent setup with only minor conflicting evidence; 80-89 Good setup with strong statistical edge; 70-79 Moderate edge requiring disciplined risk management; 60-69 Weak edge requiring additional confirmation; 50-59 Very weak setup with significant uncertainty; below 50 automatically returns DONT_RECOMMEND. Also return DONT_RECOMMEND whenever no strategy appropriately matches the detected market regime, confirmation signals are insufficient, multiple strategies conflict without a clear winner, market structure is unclear, or the estimated risk-to-reward ratio is below 2:1 unless the strategy historically justifies otherwise. Never recommend a trade simply because price may move; only recommend trades when objective evidence strongly supports a defined strategy with measurable statistical edge.
+TRADING_STRATEGY_FULL = """You are an institutional-grade technical market analyst whose objective is to determine whether a high-probability trading opportunity exists, not to predict future price movement. Base every conclusion solely on objective market evidence and never assume missing information. Before evaluating any trade, identify the current market regime as Strong Uptrend, Strong Downtrend, Weak Trend, Range, Compression, Volatility Expansion, Low Volatility Consolidation, Distribution, Accumulation, or Reversal. Only evaluate strategies that statistically perform well in the detected regime. Never force a recommendation; if evidence is conflicting, incomplete, or weak, return DONT_RECOMMEND. Trend strategies should only be considered in trending markets, while mean reversion strategies should only be considered in ranging or low-volatility environments. Breakout strategies require both volatility and volume expansion, while reversal strategies require clear evidence of momentum exhaustion and structural confirmation. Every recommendation must include the detected strategy, market regime, confidence score, reasoning, invalidation conditions, and an overall risk assessment. Evaluate the following strategies during every analysis. Trend Pullback: identify established higher highs and higher lows (or lower highs and lower lows), wait for a controlled pullback into dynamic support such as VWAP, EMA, or previous structure, then require continuation confirmation before entry. Opening Range Breakout (ORB): only applicable near the market open after the opening range has formed; require a decisive breakout supported by expanding volume and no immediate rejection. Breakout: require price to close beyond major support or resistance with above-average volume, increasing volatility, and preferably a successful retest. Break and Retest: only after a confirmed breakout where price returns to the breakout level, respects it, and resumes the original direction. Trend Continuation: identify a strong trend followed by a brief consolidation before continuation with expanding momentum. Compression Breakout: identify prolonged low volatility, narrowing price range, and declining volume before a sudden expansion confirms direction. Failed Breakout: detect a breakout that immediately loses momentum, returns inside the previous range, and forms reversal confirmation before considering the opposite direction. Evaluate mean reversion and reversal strategies only when market conditions support them. Mean Reversion: identify significant extension from the market average combined with slowing momentum inside an established range, using factors such as RSI extremes, Bollinger Bands, or standard deviation while avoiding strong trending environments. VWAP Reversion: detect significant extensions away from VWAP followed by weakening momentum and declining participation. VWAP Bounce: in trending markets, identify pullbacks into VWAP that are respected before continuation. Support and Resistance Bounce: require repeated historical reactions at a level and a clear rejection before entry. Liquidity Sweep: identify price briefly taking previous highs or lows before immediately reversing back into range, indicating stop hunting. Fair Value Gap (FVG): identify impulsive moves creating price imbalances, then require retracement into the imbalance before continuation. Order Block: identify fresh institutional supply or demand zones where price revisits and rejects decisively. Volume Profile: evaluate reactions around the Point of Control (POC), High Volume Nodes (HVN), Low Volume Nodes (LVN), and Value Area High/Low, giving higher weight when these align with market structure. Exhaustion Reversal: identify extended directional moves showing divergence, climax volume, slowing momentum, and confirmed structural reversal before considering a counter-trend trade. Calculate a confidence score from 0-100 using only objective evidence. Increase confidence when multiple independent confirmations agree, including higher timeframe trend alignment, market structure, volume expansion, volatility expansion, VWAP agreement, support and resistance confluence, liquidity confirmation, volume profile confluence, healthy pullbacks, and strong continuation candles. Reduce confidence for conflicting signals, weak volume, poor follow-through, repeated tests of key levels, excessive volatility without direction, low liquidity, major scheduled news, or deteriorating market structure. Confidence should represent the statistical quality of the setup rather than certainty of outcome. Use the following scale: 95-100 Exceptional setup with near-perfect confluence; 90-94 Excellent setup with only minor conflicting evidence; 80-89 Good setup with strong statistical edge; 70-79 Moderate edge requiring disciplined risk management; 60-69 Weak edge requiring additional confirmation; 50-59 Very weak setup with significant uncertainty; below 50 automatically returns DONT_RECOMMEND. Also return DONT_RECOMMEND whenever no strategy appropriately matches the detected market regime, confirmation signals are insufficient, multiple strategies conflict without a clear winner, market structure is unclear, or the estimated risk-to-reward ratio is below 1.5:1 unless the strategy historically justifies otherwise. Never recommend a trade simply because price may move; only recommend trades when objective evidence strongly supports a defined strategy with measurable statistical edge.
 
 For every analysis, structure your output exactly as follows:
 - Detected Strategy
@@ -51,7 +52,7 @@ Precision Warning for Low-Priced Instruments: When a price is below 0.01 (common
 
 Time and Frequency Constraint: All trade ideas must be structured for a maximum hold time of 1.5 hours from entry, with take-profit targets realistically reachable within that window based on the instrument's recent volatility and typical move speed — not targets that assume a multi-hour or multi-day move. Additionally, be highly selective — the trader is aiming for roughly 3 well-considered trades per day, not a high-frequency stream of setups. Only recommend a trade when the setup is genuinely strong; if a marginal or mediocre setup exists, or if no plausible path to target exists within 1.5 hours, return DONT_RECOMMEND rather than lowering the bar. Favor quality and patience over quantity.
 
-Risk:Reward Verification: Before finalizing any recommendation, explicitly compute risk as |Entry − Stop Loss| and reward as |Take Profit − Entry|, then divide reward by risk to get the actual R:R ratio. State this calculation's inputs and result accurately — never state an R:R ratio without having correctly performed this division. If the computed ratio falls below 2:1, first check whether a more structurally sound stop-loss or take-profit level would genuinely produce 2:1 or better, and use those levels if so. Only return DONT_RECOMMEND on R:R grounds if no reasonable structural adjustment achieves 2:1 and the setup doesn't otherwise justify an exception per the framework above — do not discard an otherwise strong setup over this check alone if better levels are available. The one hard rule: never report an R:R number that your own math doesn't support.
+Risk:Reward Verification: Before finalizing any recommendation, explicitly compute risk as |Entry − Stop Loss| and reward as |Take Profit − Entry|, then divide reward by risk to get the actual R:R ratio. State this calculation's inputs and result accurately — never state an R:R ratio without having correctly performed this division. If the computed ratio falls below 1.5:1, first check whether a more structurally sound stop-loss or take-profit level would genuinely produce 1.5:1 or better, and use those levels if so. Only return DONT_RECOMMEND on R:R grounds if no reasonable structural adjustment achieves 1.5:1 and the setup doesn't otherwise justify an exception per the framework above — do not discard an otherwise strong setup over this check alone if better levels are available. The one hard rule: never report an R:R number that your own math doesn't support. When the R:R check itself is the reason for declining, do not first print the full structured fields (Entry/Stop/Target/etc.) and then append DONT_RECOMMEND — switch entirely to the DONT_RECOMMEND format and explain the R:R shortfall as the reason, without listing the abandoned price levels as if they were a live recommendation.
 
 Confidence Score Calibration: Do not default to a habitual middle-range number. Build the score explicitly: list each confirming factor present (trend alignment, structure confluence, volume/proxy conviction, momentum, higher-timeframe agreement) and each detracting factor (conflicting signals, weak follow-through, proximity to resistance, choppiness), then derive the score from the actual count and strength of each — more confirmations with no major detractors should score notably higher (80s-90s), while few confirmations or several detractors should score notably lower (50s-low 60s). Before finalizing, explicitly check whether the evidence actually supports a score in the 40s, 80s, or 90s rather than defaulting toward the middle of the range."""
 
@@ -72,7 +73,7 @@ Precision Warning for Low-Priced Instruments: When a price is below 0.01 (common
 
 Time and Frequency Constraint: All trade ideas must be structured for a maximum hold time of 1.5 hours from entry, with take-profit targets realistically reachable within that window based on the instrument's recent volatility and typical move speed. Be highly selective — the trader is aiming for roughly 3 well-considered trades per day. Only report CONFIDENCE at 50+ when the setup is genuinely strong and reachable within 1.5 hours; otherwise report CONFIDENCE below 50 with STRATEGY: NONE.
 
-Risk:Reward Verification: Before finalizing ENTRY, STOP_LOSS, and TAKE_PROFIT, compute risk as |Entry − Stop Loss| and reward as |Take Profit − Entry|, then divide reward by risk. If below 2:1, first try more structurally sound levels that would achieve 2:1. Only drop to CONFIDENCE below 50 / STRATEGY: NONE on R:R grounds if no reasonable adjustment works and no exception is justified. Never output a stated ratio your own numbers don't support.
+Risk:Reward Verification: Before finalizing ENTRY, STOP_LOSS, and TAKE_PROFIT, compute risk as |Entry − Stop Loss| and reward as |Take Profit − Entry|, then divide reward by risk. If below 1.5:1, first try more structurally sound levels that would achieve 1.5:1. Only drop to CONFIDENCE below 50 / STRATEGY: NONE on R:R grounds if no reasonable adjustment works and no exception is justified. Never output a stated ratio your own numbers don't support.
 
 Confidence Score Calibration: Do not default to a habitual middle-range number like 60-65. Build the score from the actual count and strength of confirming vs. detracting factors — strong confluence with no major detractors should score 80s-90s, weak or conflicted evidence should score well below 60. Actively check whether the evidence supports the 40s, 80s, or 90s before settling on a middle-range number."""
 
@@ -232,8 +233,9 @@ def render_countdown(remaining_seconds, total_seconds, height=60):
     st.components.v1.html(widget_html, height=height)
 
 
-def render_tradingview_chart(tv_symbol, height=500):
-    """Embed a live TradingView chart widget for the given symbol."""
+def render_tradingview_chart(tv_symbol, height=500, interval="15"):
+    """Embed a live TradingView chart widget for the given symbol.
+    interval uses TradingView's own codes: 1, 5, 15, 30, 60, D (daily)."""
     widget_html = f"""
     <div class="tradingview-widget-container" style="height:100%; width:100%;">
       <div id="tradingview_chart" style="height:100%; width:100%;"></div>
@@ -243,7 +245,7 @@ def render_tradingview_chart(tv_symbol, height=500):
         "width": "100%",
         "height": {height},
         "symbol": "{tv_symbol}",
-        "interval": "15",
+        "interval": "{interval}",
         "timezone": "Etc/UTC",
         "theme": "dark",
         "style": "1",
@@ -537,160 +539,151 @@ with tab_auto:
             st.session_state.auto_scanning = False
             st.rerun()
 
-    status = st.empty()
-    metrics_row = st.empty()
+    @st.fragment(run_every="3s")
+    def auto_scan_fragment():
+        """Everything in here refreshes on its own timer, independent of the
+        rest of the page — the chart and manual scan tab never reload or
+        dim when this fragment updates."""
+        status = st.empty()
+        metrics_row = st.empty()
 
-    if st.session_state.auto_scanning:
-        status.markdown(
-            f"<span class='live-dot'></span>"
-            f"<span style='font-family:\"IBM Plex Mono\", monospace; color:#5FBF77;'>"
-            f"LIVE — watching {st.session_state.auto_symbol}</span>",
-            unsafe_allow_html=True,
-        )
+        if st.session_state.auto_scanning:
+            status.markdown(
+                f"<span class='live-dot'></span>"
+                f"<span style='font-family:\"IBM Plex Mono\", monospace; color:#5FBF77;'>"
+                f"LIVE — watching {st.session_state.auto_symbol}</span>",
+                unsafe_allow_html=True,
+            )
 
-        now = time.time()
-        seconds_since_last = now - st.session_state.last_auto_scan
+            now = time.time()
+            seconds_since_last = now - st.session_state.last_auto_scan
+            scan_interval_seconds = st.session_state.scan_interval_minutes * 60
 
-        scan_interval_seconds = st.session_state.scan_interval_minutes * 60
-        if seconds_since_last >= scan_interval_seconds:
-            with st.spinner(f"Checking {st.session_state.auto_symbol}..."):
-                price_data, error = get_intraday_data(
-                    st.session_state.auto_symbol,
-                    st.session_state.auto_interval,
-                    size=INTERVAL_TO_CANDLES.get(st.session_state.auto_interval, 50),
-                )
-                if price_data is None:
-                    st.session_state.last_check_debug = {
-                        "time": datetime.now().strftime("%H:%M:%S"),
-                        "error": f"Price fetch failed: {error}",
-                        "confidence": None,
-                    }
-                else:
-                    # Track price movement for the live metric
-                    latest_close = float(price_data[-1]["close"])
-                    st.session_state.prev_price = st.session_state.last_price
-                    st.session_state.last_price = latest_close
-
-                    daily_data = get_daily_context(st.session_state.auto_symbol)
-                    instruction = "Give a scan reading in the exact trimmed format specified."
-                    content = build_data_message(
-                        st.session_state.auto_symbol, st.session_state.auto_interval, price_data, daily_data, instruction
+            if seconds_since_last >= scan_interval_seconds:
+                with st.spinner(f"Checking {st.session_state.auto_symbol}..."):
+                    price_data, error = get_intraday_data(
+                        st.session_state.auto_symbol,
+                        st.session_state.auto_interval,
+                        size=INTERVAL_TO_CANDLES.get(st.session_state.auto_interval, 50),
                     )
-                    scan_text, error = call_claude(
-                        TRADING_STRATEGY_SCAN, [{"role": "user", "content": content}], max_tokens=350
-                    )
-                    if scan_text is None:
+                    if price_data is None:
                         st.session_state.last_check_debug = {
                             "time": datetime.now().strftime("%H:%M:%S"),
-                            "error": f"Claude API error: {error}",
+                            "error": f"Price fetch failed: {error}",
                             "confidence": None,
                         }
                     else:
-                        confidence = parse_confidence(scan_text)
-                        st.session_state.last_check_debug = {
-                            "time": datetime.now().strftime("%H:%M:%S"),
-                            "error": None if confidence is not None else "Could not parse a confidence value from the response — see raw text below.",
-                            "confidence": confidence,
-                            "raw": scan_text,
-                        }
-                        if confidence is not None and confidence >= st.session_state.confidence_threshold:
-                            st.session_state.signals.insert(0, {
-                                "id": f"{datetime.now().timestamp()}",
+                        latest_close = float(price_data[-1]["close"])
+                        st.session_state.prev_price = st.session_state.last_price
+                        st.session_state.last_price = latest_close
+
+                        daily_data = get_daily_context(st.session_state.auto_symbol)
+                        instruction = "Give a scan reading in the exact trimmed format specified."
+                        content = build_data_message(
+                            st.session_state.auto_symbol, st.session_state.auto_interval, price_data, daily_data, instruction
+                        )
+                        scan_text, error = call_claude(
+                            TRADING_STRATEGY_SCAN, [{"role": "user", "content": content}], max_tokens=350
+                        )
+                        if scan_text is None:
+                            st.session_state.last_check_debug = {
                                 "time": datetime.now().strftime("%H:%M:%S"),
-                                "symbol": st.session_state.auto_symbol,
-                                "text": scan_text,
-                            })
-            st.session_state.last_auto_scan = time.time()
+                                "error": f"Claude API error: {error}",
+                                "confidence": None,
+                            }
+                        else:
+                            confidence = parse_confidence(scan_text)
+                            st.session_state.last_check_debug = {
+                                "time": datetime.now().strftime("%H:%M:%S"),
+                                "error": None if confidence is not None else "Could not parse a confidence value from the response — see raw text below.",
+                                "confidence": confidence,
+                                "raw": scan_text,
+                            }
+                            if confidence is not None and confidence >= st.session_state.confidence_threshold:
+                                st.session_state.signals.insert(0, {
+                                    "id": f"{datetime.now().timestamp()}",
+                                    "time": datetime.now().strftime("%H:%M:%S"),
+                                    "symbol": st.session_state.auto_symbol,
+                                    "text": scan_text,
+                                })
+                st.session_state.last_auto_scan = time.time()
 
-        # Live price metric
-        if st.session_state.last_price is not None:
-            delta = None
-            if st.session_state.prev_price is not None:
-                delta = st.session_state.last_price - st.session_state.prev_price
-            with metrics_row.container():
-                st.metric(
-                    label=f"{st.session_state.auto_symbol} — last checked price",
-                    value=f"{st.session_state.last_price:.8f}".rstrip("0").rstrip("."),
-                    delta=f"{delta:.8f}".rstrip("0").rstrip(".") if delta else None,
-                )
+            if st.session_state.last_price is not None:
+                delta = None
+                if st.session_state.prev_price is not None:
+                    delta = st.session_state.last_price - st.session_state.prev_price
+                with metrics_row.container():
+                    st.metric(
+                        label=f"{st.session_state.auto_symbol} — last checked price",
+                        value=f"{st.session_state.last_price:.8f}".rstrip("0").rstrip("."),
+                        delta=f"{delta:.8f}".rstrip("0").rstrip(".") if delta else None,
+                    )
 
-        # Transparency: show what the last check actually returned, pass or fail
-        if st.session_state.last_check_debug:
-            dbg = st.session_state.last_check_debug
-            if dbg.get("error"):
-                st.warning(f"Last check ({dbg['time']}): {dbg['error']}")
-                if dbg.get("raw"):
-                    with st.expander("Raw response from last check"):
-                        st.text(dbg["raw"])
-            else:
-                st.caption(
-                    f"Last check ({dbg['time']}): confidence {dbg['confidence']} "
-                    f"— threshold is {st.session_state.confidence_threshold}"
-                )
+            if st.session_state.last_check_debug:
+                dbg = st.session_state.last_check_debug
+                if dbg.get("error"):
+                    st.warning(f"Last check ({dbg['time']}): {dbg['error']}")
+                    if dbg.get("raw"):
+                        with st.expander("Raw response from last check"):
+                            st.text(dbg["raw"])
+                else:
+                    st.caption(
+                        f"Last check ({dbg['time']}): confidence {dbg['confidence']} "
+                        f"— threshold is {st.session_state.confidence_threshold}"
+                    )
 
-    # Render signals BEFORE the rerun trigger below, so new signals actually show up
-    if st.session_state.signals:
-        st.markdown(
-            "<h3 style='margin-top:1.5rem;'>Signals Found</h3>", unsafe_allow_html=True
-        )
-        for sig in st.session_state.signals:
-            confidence = parse_confidence(sig["text"])
-            if confidence is not None and confidence >= 85:
-                tier_color, tier_label = "#5FBF77", "STRONG"
-            elif confidence is not None and confidence >= 75:
-                tier_color, tier_label = "#C9A24B", "MODERATE"
-            else:
-                tier_color, tier_label = "#4FD1C5", "SIGNAL"
+        if st.session_state.signals:
+            st.markdown(
+                "<h3 style='margin-top:1.5rem;'>Signals Found</h3>", unsafe_allow_html=True
+            )
+            for sig in st.session_state.signals:
+                confidence = parse_confidence(sig["text"])
+                if confidence is not None and confidence >= 85:
+                    tier_color, tier_label = "#5FBF77", "STRONG"
+                elif confidence is not None and confidence >= 75:
+                    tier_color, tier_label = "#C9A24B", "MODERATE"
+                else:
+                    tier_color, tier_label = "#4FD1C5", "SIGNAL"
 
-            body_html = sig["text"].replace("\n", "<br>")
+                body_html = sig["text"].replace("\n", "<br>")
 
-            close_col, card_col = st.columns([0.05, 0.95])
-            with close_col:
-                st.markdown("<div style='margin-top:8px;'></div>", unsafe_allow_html=True)
-                if st.button("✕", key=f"close_{sig.get('id', sig['time'])}", help="Dismiss this signal"):
-                    st.session_state.signals = [
-                        s for s in st.session_state.signals
-                        if s.get("id", s["time"]) != sig.get("id", sig["time"])
-                    ]
-            with card_col:
-                st.markdown(
-                    f"""
-                    <div style='background-color:#131829; border-left:4px solid {tier_color};
-                                border-radius:4px; padding:14px 18px; margin-bottom:12px;'>
-                        <div style='display:flex; justify-content:space-between; align-items:center;
-                                    font-family:"IBM Plex Sans", sans-serif; font-weight:600;
-                                    color:{tier_color}; font-size:0.85rem; letter-spacing:0.05em;
-                                    margin-bottom:8px;'>
-                            <span>{tier_label} — {sig['symbol']}</span>
-                            <span style='color:#7A8199; font-family:"IBM Plex Mono", monospace;
-                                         font-weight:400;'>{sig['time']}</span>
+                close_col, card_col = st.columns([0.05, 0.95])
+                with close_col:
+                    st.markdown("<div style='margin-top:8px;'></div>", unsafe_allow_html=True)
+                    if st.button("✕", key=f"close_{sig.get('id', sig['time'])}", help="Dismiss this signal"):
+                        st.session_state.signals = [
+                            s for s in st.session_state.signals
+                            if s.get("id", s["time"]) != sig.get("id", sig["time"])
+                        ]
+                with card_col:
+                    st.markdown(
+                        f"""
+                        <div style='background-color:#131829; border-left:4px solid {tier_color};
+                                    border-radius:4px; padding:14px 18px; margin-bottom:12px;'>
+                            <div style='display:flex; justify-content:space-between; align-items:center;
+                                        font-family:"IBM Plex Sans", sans-serif; font-weight:600;
+                                        color:{tier_color}; font-size:0.85rem; letter-spacing:0.05em;
+                                        margin-bottom:8px;'>
+                                <span>{tier_label} — {sig['symbol']}</span>
+                                <span style='color:#7A8199; font-family:"IBM Plex Mono", monospace;
+                                             font-weight:400;'>{sig['time']}</span>
+                            </div>
+                            <div style='font-family:"IBM Plex Mono", monospace; font-size:0.85rem;
+                                        color:#E8EAF0; line-height:1.6; white-space:pre-wrap;'>{body_html}</div>
                         </div>
-                        <div style='font-family:"IBM Plex Mono", monospace; font-size:0.85rem;
-                                    color:#E8EAF0; line-height:1.6; white-space:pre-wrap;'>{body_html}</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-    else:
-        st.caption("No signals above the confidence threshold yet.")
+                        """,
+                        unsafe_allow_html=True,
+                    )
+        else:
+            st.caption("No signals above the confidence threshold yet.")
 
-    # Trigger the next check — this happens LAST so everything above has
-    # already rendered on screen before the page restarts.
-    # The countdown itself ticks smoothly client-side (JS), so the page
-    # only needs to actually reload periodically to check if it's time
-    # to run the next scan — not every few seconds just to move a bar.
-    if st.session_state.auto_scanning:
-        scan_interval_seconds = st.session_state.scan_interval_minutes * 60
-        elapsed = time.time() - st.session_state.last_auto_scan
-        remaining = max(int(scan_interval_seconds - elapsed), 0)
-        render_countdown(remaining, scan_interval_seconds)
+        if st.session_state.auto_scanning:
+            scan_interval_seconds = st.session_state.scan_interval_minutes * 60
+            elapsed = time.time() - st.session_state.last_auto_scan
+            remaining = max(int(scan_interval_seconds - elapsed), 0)
+            render_countdown(remaining, scan_interval_seconds)
 
-        # Reload only every 20s (or sooner if the check is due within that
-        # window) — enough to still catch the scan on time without the
-        # page visibly refreshing every few seconds.
-        next_wake = min(20, remaining if remaining > 0 else 1)
-        time.sleep(next_wake)
-        st.rerun()
+    auto_scan_fragment()
 
 # ---------------- LIVE CHART (full width, below everything) ----------------
 st.divider()
@@ -712,6 +705,8 @@ if st.session_state.show_chart:
         help="e.g. NASDAQ:AAPL, OANDA:XAUUSD, BINANCE:PEPEUSDT",
     )
     st.session_state.chart_symbol_override = override
-    render_tradingview_chart(override, height=400)  # ~1/3 of content width at 1280px screen
+    render_tradingview_chart(
+        override, height=400, interval=INTERVAL_TO_TV_CODE.get(st.session_state.auto_interval, "15")
+    )  # ~1/3 of content width at 1280px screen
 else:
     st.caption("Chart hidden — toggle on to load it again.")
