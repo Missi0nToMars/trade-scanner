@@ -44,7 +44,9 @@ Time and Frequency Constraint: All trade ideas must be structured for a maximum 
 
 Risk:Reward Verification: Before finalizing any recommendation, explicitly compute risk as |Entry − Stop Loss| and reward as |Take Profit − Entry|, then divide reward by risk to get the actual R:R ratio. State this calculation's inputs and result accurately — never state an R:R ratio without having correctly performed this division. If the computed ratio falls below 1.5:1, first check whether a more structurally sound stop-loss or take-profit level would genuinely produce 1.5:1 or better, and use those levels if so. Only decline on R:R grounds if no reasonable structural adjustment achieves 1.5:1 and the setup doesn't otherwise justify an exception per the framework above — do not discard an otherwise strong setup over this check alone if better levels are available. The one hard rule: never report an R:R number that your own math doesn't support.
 
-Confidence Score Calibration: Do not default to a habitual middle-range number. Build the score explicitly: list each confirming factor present (trend alignment, structure confluence, volume/proxy conviction, momentum, higher-timeframe agreement) and each detracting factor (conflicting signals, weak follow-through, proximity to resistance, choppiness), then derive the score from the actual count and strength of each — more confirmations with no major detractors should score notably higher (80s-90s), while few confirmations or several detractors should score notably lower (50s-low 60s). Before finalizing, explicitly check whether the evidence actually supports a score in the 40s, 80s, or 90s rather than defaulting toward the middle of the range."""
+Confidence Score Calibration: Do not default to a habitual middle-range number. Build the score explicitly: list each confirming factor present (trend alignment, structure confluence, volume/proxy conviction, momentum, higher-timeframe agreement) and each detracting factor (conflicting signals, weak follow-through, proximity to resistance, choppiness), then derive the score from the actual count and strength of each — more confirmations with no major detractors should score notably higher (80s-90s), while few confirmations or several detractors should score notably lower (50s-low 60s). Before finalizing, explicitly check whether the evidence actually supports a score in the 40s, 80s, or 90s rather than defaulting toward the middle of the range.
+
+Economic Calendar Awareness: If upcoming high-impact economic events (e.g. NFP, FOMC, CPI) are listed in the provided context, treat any event occurring within the trade's potential 1.5-hour hold window as a meaningful risk factor. Price action can become erratic and disconnected from normal technical structure in the minutes before and after such a release. Reduce confidence accordingly, and if a major release falls within roughly 30 minutes before or during the likely hold window, lean toward declining the trade even if the technical setup otherwise looks strong — note this explicitly as the reason. This applies regardless of instrument, since USD releases affect gold, forex, crypto, and most major stocks."""
 
 # ---------------- Full prompt (manual scans): shared core + full written format ----------------
 
@@ -165,11 +167,14 @@ def build_data_message(symbol, interval, price_data, daily_data, instruction):
         f"\n\nHigher timeframe context — last 20 daily candles:\n{json.dumps(daily_data, indent=2)}"
         if daily_data else "\n\n(Daily context unavailable for this symbol.)"
     )
+    economic_events = get_upcoming_economic_events_cached()
+    economic_context_text = format_economic_events_context(economic_events)
     return (
         f"Here is {symbol} price data at {interval} candles, "
         f"most recent {len(price_data)} candles, oldest to newest:\n\n"
         f"{price_data_text}"
-        f"{daily_context_text}\n\n"
+        f"{daily_context_text}"
+        f"{economic_context_text}\n\n"
         f"{instruction}"
     )
 
@@ -204,6 +209,68 @@ def check_signal_staleness(scan_text, current_price):
     if not is_long and current_price < entry:
         return f"⚠ Price has already moved past this entry (now {current_price:.5f} vs entry {entry:.5f})"
     return None
+
+
+def get_upcoming_economic_events(hours_ahead=3):
+    """Pull high-impact economic events (NFP, FOMC, CPI, etc.) in the next
+    few hours from Finnhub's free economic calendar. Returns a list of dicts,
+    or an empty list if the key isn't set up or the call fails — this should
+    never block a scan from running."""
+    if "FINNHUB_API_KEY" not in st.secrets:
+        return []
+    try:
+        today = datetime.now().strftime("%Y-%m-%d")
+        url = "https://finnhub.io/api/v1/calendar/economic"
+        params = {"from": today, "to": today, "token": st.secrets["FINNHUB_API_KEY"]}
+        response = requests.get(url, params=params, timeout=10)
+        data = response.json()
+        events = data.get("economicCalendar", data.get("data", []))
+
+        now = datetime.now()
+        upcoming = []
+        for event in events:
+            if event.get("impact", "").lower() not in ("high",):
+                continue
+            event_time_str = event.get("time")
+            if not event_time_str:
+                continue
+            try:
+                event_time = datetime.strptime(event_time_str, "%Y-%m-%d %H:%M:%S")
+            except (ValueError, TypeError):
+                continue
+            minutes_away = (event_time - now).total_seconds() / 60
+            if 0 <= minutes_away <= hours_ahead * 60:
+                upcoming.append({
+                    "event": event.get("event", "Unknown event"),
+                    "country": event.get("country", ""),
+                    "time": event_time.strftime("%H:%M"),
+                    "minutes_away": int(minutes_away),
+                })
+        return upcoming
+    except Exception:
+        return []  # never let a calendar failure block scanning
+
+
+def format_economic_events_context(events):
+    """Turn the events list into a short text block to include in the
+    prompt, or a note that none are imminent."""
+    if not events:
+        return "\n\nUpcoming High-Impact Economic Events: None scheduled in the next few hours."
+    lines = [f"- {e['event']} ({e['country']}) at {e['time']}, in ~{e['minutes_away']} min" for e in events]
+    return "\n\nUpcoming High-Impact Economic Events (factor these into your risk assessment and confidence — avoid recommending entries shortly before a major release):\n" + "\n".join(lines)
+
+
+def get_upcoming_economic_events_cached():
+    """Only check the calendar every ~10 minutes rather than on every scan —
+    events don't change minute to minute, so this saves API calls."""
+    now = time.time()
+    if (
+        "econ_events_cache" not in st.session_state
+        or now - st.session_state.get("econ_events_cache_time", 0) > 600
+    ):
+        st.session_state.econ_events_cache = get_upcoming_economic_events()
+        st.session_state.econ_events_cache_time = now
+    return st.session_state.econ_events_cache
 
 
 def get_sheet():
@@ -468,6 +535,13 @@ st.markdown(
     "</div>",
     unsafe_allow_html=True,
 )
+
+_upcoming_events = get_upcoming_economic_events_cached()
+if _upcoming_events:
+    _event_lines = "; ".join(
+        f"{e['event']} ({e['country']}) in ~{e['minutes_away']}min" for e in _upcoming_events
+    )
+    st.warning(f"⚠ High-impact economic event(s) approaching: {_event_lines}")
 
 # ---- Session state setup ----
 if "conversation" not in st.session_state:
