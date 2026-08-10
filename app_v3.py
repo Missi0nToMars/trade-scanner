@@ -752,31 +752,31 @@ with tab_auto:
                             if s.get("id", s["time"]) != sig.get("id", sig["time"])
                         ]
                 with card_col:
-                    stale_html = (
-                        f"""<div style='background-color:#3A2A1A; color:#E8B25F; border-radius:3px;
-                                    padding:6px 10px; font-family:"IBM Plex Mono", monospace;
-                                    font-size:0.78rem; margin-bottom:10px;'>{html.escape(staleness_warning)}</div>"""
-                        if staleness_warning else ""
+                    stale_html = ""
+                    if staleness_warning:
+                        stale_html = (
+                            "<div style='background-color:#3A2A1A; color:#E8B25F; border-radius:3px; "
+                            "padding:6px 10px; font-family:\"IBM Plex Mono\", monospace; "
+                            "font-size:0.78rem; margin-bottom:10px;'>"
+                            + html.escape(staleness_warning) + "</div>"
+                        )
+
+                    card_html = (
+                        "<div style='background-color:#131829; border-left:4px solid " + tier_color + "; "
+                        "border-radius:4px; padding:14px 18px; margin-bottom:12px;'>"
+                        "<div style='display:flex; justify-content:space-between; align-items:center; "
+                        "font-family:\"IBM Plex Sans\", sans-serif; font-weight:600; "
+                        "color:" + tier_color + "; font-size:0.85rem; letter-spacing:0.05em; margin-bottom:8px;'>"
+                        "<span>" + html.escape(tier_label) + " — " + html.escape(sig['symbol']) + "</span>"
+                        "<span style='color:#7A8199; font-family:\"IBM Plex Mono\", monospace; "
+                        "font-weight:400;'>" + html.escape(sig['time']) + "</span>"
+                        "</div>"
+                        + stale_html +
+                        "<div style='font-family:\"IBM Plex Mono\", monospace; font-size:0.85rem; "
+                        "color:#E8EAF0; line-height:1.6; white-space:pre-wrap;'>" + body_html + "</div>"
+                        "</div>"
                     )
-                    st.markdown(
-                        f"""
-                        <div style='background-color:#131829; border-left:4px solid {tier_color};
-                                    border-radius:4px; padding:14px 18px; margin-bottom:12px;'>
-                            <div style='display:flex; justify-content:space-between; align-items:center;
-                                        font-family:"IBM Plex Sans", sans-serif; font-weight:600;
-                                        color:{tier_color}; font-size:0.85rem; letter-spacing:0.05em;
-                                        margin-bottom:8px;'>
-                                <span>{tier_label} — {sig['symbol']}</span>
-                                <span style='color:#7A8199; font-family:"IBM Plex Mono", monospace;
-                                             font-weight:400;'>{sig['time']}</span>
-                            </div>
-                            {stale_html}
-                            <div style='font-family:"IBM Plex Mono", monospace; font-size:0.85rem;
-                                        color:#E8EAF0; line-height:1.6; white-space:pre-wrap;'>{body_html}</div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
+                    st.markdown(card_html, unsafe_allow_html=True)
         else:
             st.caption("No signals above the confidence threshold yet.")
 
