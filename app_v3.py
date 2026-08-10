@@ -14,6 +14,7 @@ import re
 from datetime import datetime
 import gspread
 from google.oauth2.service_account import Credentials
+import html
 
 # ---- API keys pulled from Streamlit Secrets ----
 TWELVE_DATA_KEY = st.secrets["TWELVE_DATA_KEY"]
@@ -731,7 +732,7 @@ with tab_auto:
                 else:
                     tier_color, tier_label = "#4FD1C5", "SIGNAL"
 
-                body_html = sig["text"].replace("\n", "<br>")
+                body_html = html.escape(sig["text"]).replace("\n", "<br>")
                 staleness_warning = check_signal_staleness(sig["text"], st.session_state.last_price)
 
                 close_col, card_col = st.columns([0.05, 0.95])
@@ -746,7 +747,7 @@ with tab_auto:
                     stale_html = (
                         f"""<div style='background-color:#3A2A1A; color:#E8B25F; border-radius:3px;
                                     padding:6px 10px; font-family:"IBM Plex Mono", monospace;
-                                    font-size:0.78rem; margin-bottom:10px;'>{staleness_warning}</div>"""
+                                    font-size:0.78rem; margin-bottom:10px;'>{html.escape(staleness_warning)}</div>"""
                         if staleness_warning else ""
                     )
                     st.markdown(
