@@ -12,6 +12,8 @@ import json
 import time
 import re
 from datetime import datetime
+import gspread
+from google.oauth2.service_account import Credentials
 
 # ---- API keys pulled from Streamlit Secrets ----
 TWELVE_DATA_KEY = st.secrets["TWELVE_DATA_KEY"]
@@ -169,6 +171,88 @@ def build_data_message(symbol, interval, price_data, daily_data, instruction):
         f"{daily_context_text}\n\n"
         f"{instruction}"
     )
+
+
+def parse_price_field(scan_text, field_name):
+    """Extract a numeric price value for a given field label (e.g. ENTRY, TAKE_PROFIT)."""
+    if not scan_text:
+        return None
+    match = re.search(rf"{field_name}:\s*([\d.]+(?:e-?\d+)?)", scan_text, re.IGNORECASE)
+    if match:
+        try:
+            return float(match.group(1))
+        except ValueError:
+            return None
+    return None
+
+
+def check_signal_staleness(scan_text, current_price):
+    """Compare a signal's entry price against the current live price and flag
+    if price has already moved past it, since the AI can't know the price at
+    the exact moment the user reads the card — only the app can check that."""
+    if current_price is None:
+        return None
+    entry = parse_price_field(scan_text, "ENTRY")
+    take_profit = parse_price_field(scan_text, "TAKE_PROFIT")
+    if entry is None or take_profit is None:
+        return None
+
+    is_long = take_profit > entry  # direction inferred from where the target sits
+    if is_long and current_price > entry:
+        return f"⚠ Price has already moved past this entry (now {current_price:.5f} vs entry {entry:.5f})"
+    if not is_long and current_price < entry:
+        return f"⚠ Price has already moved past this entry (now {current_price:.5f} vs entry {entry:.5f})"
+    return None
+
+
+def get_sheet():
+    """Connect to the Google Sheet used for logging signals. Returns None
+    (and shows nothing to the user) if credentials aren't set up yet, so
+    logging failures never break the rest of the app."""
+    try:
+        scopes = [
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive",
+        ]
+        creds = Credentials.from_service_account_info(
+            st.secrets["gcp_service_account"], scopes=scopes
+        )
+        client = gspread.authorize(creds)
+        return client.open(st.secrets["SHEET_NAME"]).sheet1
+    except Exception:
+        return None
+
+
+def log_signal_to_sheet(symbol, scan_text):
+    """Append a new signal row to the Google Sheet. Silently does nothing
+    if the sheet isn't reachable — logging is a nice-to-have, not something
+    that should ever interrupt an actual scan."""
+    sheet = get_sheet()
+    if sheet is None:
+        return
+    try:
+        confidence = parse_confidence(scan_text)
+        entry = parse_price_field(scan_text, "ENTRY")
+        stop_loss = parse_price_field(scan_text, "STOP_LOSS")
+        take_profit = parse_price_field(scan_text, "TAKE_PROFIT")
+        strategy_match = re.search(r"STRATEGY:\s*(.+)", scan_text)
+        strategy = strategy_match.group(1).strip() if strategy_match else ""
+        invalidation_match = re.search(r"INVALIDATION:\s*(.+)", scan_text, re.DOTALL)
+        invalidation = invalidation_match.group(1).strip() if invalidation_match else ""
+
+        sheet.append_row([
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            symbol,
+            strategy,
+            confidence,
+            entry,
+            stop_loss,
+            take_profit,
+            invalidation,
+            "",  # Outcome — filled in later by you once the trade plays out
+        ])
+    except Exception:
+        pass  # never let a logging failure interrupt scanning
 
 
 def parse_confidence(scan_text):
@@ -607,6 +691,7 @@ with tab_auto:
                                     "symbol": st.session_state.auto_symbol,
                                     "text": scan_text,
                                 })
+                                log_signal_to_sheet(st.session_state.auto_symbol, scan_text)
                 st.session_state.last_auto_scan = time.time()
 
             if st.session_state.last_price is not None:
@@ -647,6 +732,7 @@ with tab_auto:
                     tier_color, tier_label = "#4FD1C5", "SIGNAL"
 
                 body_html = sig["text"].replace("\n", "<br>")
+                staleness_warning = check_signal_staleness(sig["text"], st.session_state.last_price)
 
                 close_col, card_col = st.columns([0.05, 0.95])
                 with close_col:
@@ -657,6 +743,12 @@ with tab_auto:
                             if s.get("id", s["time"]) != sig.get("id", sig["time"])
                         ]
                 with card_col:
+                    stale_html = (
+                        f"""<div style='background-color:#3A2A1A; color:#E8B25F; border-radius:3px;
+                                    padding:6px 10px; font-family:"IBM Plex Mono", monospace;
+                                    font-size:0.78rem; margin-bottom:10px;'>{staleness_warning}</div>"""
+                        if staleness_warning else ""
+                    )
                     st.markdown(
                         f"""
                         <div style='background-color:#131829; border-left:4px solid {tier_color};
@@ -669,6 +761,7 @@ with tab_auto:
                                 <span style='color:#7A8199; font-family:"IBM Plex Mono", monospace;
                                              font-weight:400;'>{sig['time']}</span>
                             </div>
+                            {stale_html}
                             <div style='font-family:"IBM Plex Mono", monospace; font-size:0.85rem;
                                         color:#E8EAF0; line-height:1.6; white-space:pre-wrap;'>{body_html}</div>
                         </div>
