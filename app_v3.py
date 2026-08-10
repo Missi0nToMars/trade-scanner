@@ -207,9 +207,9 @@ def check_signal_staleness(scan_text, current_price):
 
 
 def get_sheet():
-    """Connect to the Google Sheet used for logging signals. Returns None
-    (and shows nothing to the user) if credentials aren't set up yet, so
-    logging failures never break the rest of the app."""
+    """Connect to the Google Sheet used for logging signals. Stores any
+    error in session_state for display, rather than failing completely
+    silently, so logging issues can actually be diagnosed."""
     try:
         scopes = [
             "https://www.googleapis.com/auth/spreadsheets",
@@ -219,15 +219,17 @@ def get_sheet():
             st.secrets["gcp_service_account"], scopes=scopes
         )
         client = gspread.authorize(creds)
-        return client.open(st.secrets["SHEET_NAME"]).sheet1
-    except Exception:
+        sheet = client.open(st.secrets["SHEET_NAME"]).sheet1
+        st.session_state.last_sheet_error = None
+        return sheet
+    except Exception as e:
+        st.session_state.last_sheet_error = f"{type(e).__name__}: {e}"
         return None
 
 
 def log_signal_to_sheet(symbol, scan_text):
-    """Append a new signal row to the Google Sheet. Silently does nothing
-    if the sheet isn't reachable — logging is a nice-to-have, not something
-    that should ever interrupt an actual scan."""
+    """Append a new signal row to the Google Sheet. Logging failures never
+    interrupt scanning, but the error is saved for display."""
     sheet = get_sheet()
     if sheet is None:
         return
@@ -252,8 +254,9 @@ def log_signal_to_sheet(symbol, scan_text):
             invalidation,
             "",  # Outcome — filled in later by you once the trade plays out
         ])
-    except Exception:
-        pass  # never let a logging failure interrupt scanning
+        st.session_state.last_sheet_error = None
+    except Exception as e:
+        st.session_state.last_sheet_error = f"{type(e).__name__}: {e}"
 
 
 def parse_confidence(scan_text):
@@ -487,6 +490,8 @@ if "prev_price" not in st.session_state:
     st.session_state.prev_price = None
 if "last_check_debug" not in st.session_state:
     st.session_state.last_check_debug = None  # holds raw text + any error from most recent check
+if "last_sheet_error" not in st.session_state:
+    st.session_state.last_sheet_error = None
 if "chart_symbol_override" not in st.session_state:
     st.session_state.chart_symbol_override = ""
 if "show_chart" not in st.session_state:
@@ -718,6 +723,9 @@ with tab_auto:
                         f"Last check ({dbg['time']}): confidence {dbg['confidence']} "
                         f"— threshold is {st.session_state.confidence_threshold}"
                     )
+
+            if st.session_state.last_sheet_error:
+                st.error(f"Sheet logging failed: {st.session_state.last_sheet_error}")
 
         if st.session_state.signals:
             st.markdown(
