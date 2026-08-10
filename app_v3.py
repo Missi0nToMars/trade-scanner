@@ -555,7 +555,7 @@ if "last_auto_scan" not in st.session_state:
 if "signals" not in st.session_state:
     st.session_state.signals = []  # list of dicts: {time, symbol, text}
 if "auto_symbol" not in st.session_state:
-    st.session_state.auto_symbol = "AAPL"
+    st.session_state.auto_symbol = "XAU/USD"
 if "confidence_threshold" not in st.session_state:
     st.session_state.confidence_threshold = DEFAULT_CONFIDENCE_THRESHOLD
 if "last_price" not in st.session_state:
@@ -582,7 +582,7 @@ with tab_manual:
     with st.form("scan_form"):
         col1, col2 = st.columns(2)
         with col1:
-            symbol = st.text_input("Stock symbol", value="AAPL")
+            symbol = st.text_input("Stock symbol", value="XAU/USD")
         with col2:
             interval = st.selectbox("Interval", ["5min", "15min", "30min", "1h"], index=1)
         run_scan = st.form_submit_button("Run Scan")
@@ -873,13 +873,15 @@ with toggle_col:
     )
 
 if st.session_state.show_chart:
-    default_symbol = st.session_state.auto_symbol or "AAPL"
+    default_symbol = st.session_state.auto_symbol or "XAU/USD"
     guessed = guess_tradingview_symbol(default_symbol)
+    if default_symbol.upper() in ("XAU/USD", "XAUUSD"):
+        guessed = "FOREXCOM:XAUUSD"
     override = st.text_input(
         "Chart symbol (TradingView format — adjust if wrong exchange)",
         value=st.session_state.chart_symbol_override or guessed,
         key="chart_symbol_input",
-        help="e.g. NASDAQ:AAPL, OANDA:XAUUSD, BINANCE:PEPEUSDT",
+        help="e.g. NASDAQ:AAPL, FOREXCOM:XAUUSD, BINANCE:PEPEUSDT",
     )
     st.session_state.chart_symbol_override = override
     render_tradingview_chart(
