@@ -273,6 +273,45 @@ def get_upcoming_economic_events_cached():
     return st.session_state.econ_events_cache
 
 
+def github_api_headers():
+    return {
+        "Authorization": f"Bearer {st.secrets['GITHUB_TOKEN']}",
+        "Accept": "application/vnd.github+json",
+    }
+
+
+def get_background_scanner_status():
+    """Returns 'active', 'disabled_manually', or None if the check fails."""
+    try:
+        owner = st.secrets["GITHUB_OWNER"]
+        repo = st.secrets["GITHUB_REPO"]
+        url = f"https://api.github.com/repos/{owner}/{repo}/actions/workflows/scan.yml"
+        response = requests.get(url, headers=github_api_headers(), timeout=10)
+        if response.status_code == 200:
+            return response.json().get("state")
+        return None
+    except Exception:
+        return None
+
+
+def set_background_scanner_enabled(enable: bool):
+    """Enables or disables the scheduled GitHub Actions workflow. Returns
+    True on success, False (with an error stored) on failure."""
+    try:
+        owner = st.secrets["GITHUB_OWNER"]
+        repo = st.secrets["GITHUB_REPO"]
+        action = "enable" if enable else "disable"
+        url = f"https://api.github.com/repos/{owner}/{repo}/actions/workflows/scan.yml/{action}"
+        response = requests.put(url, headers=github_api_headers(), timeout=10)
+        if response.status_code == 204:
+            return True
+        st.session_state.background_scanner_error = f"GitHub API returned {response.status_code}: {response.text}"
+        return False
+    except Exception as e:
+        st.session_state.background_scanner_error = str(e)
+        return False
+
+
 def get_sheet():
     """Connect to the Google Sheet used for logging signals. Stores any
     error in session_state for display, rather than failing completely
@@ -575,7 +614,7 @@ if "auto_interval" not in st.session_state:
 if "scan_interval_minutes" not in st.session_state:
     st.session_state.scan_interval_minutes = DEFAULT_SCAN_INTERVAL_MINUTES
 
-tab_manual, tab_auto = st.tabs(["Manual Scan", "Auto Scanning"])
+tab_manual, tab_auto, tab_background = st.tabs(["Manual Scan", "Auto Scanning", "Background Scanner"])
 
 # ---------------- MANUAL SCAN TAB ----------------
 with tab_manual:
@@ -861,6 +900,45 @@ with tab_auto:
             render_countdown(remaining, scan_interval_seconds)
 
     auto_scan_fragment()
+
+# ---------------- BACKGROUND SCANNER TAB (GitHub Actions control) ----------------
+with tab_background:
+    st.write(
+        "This runs independently of your browser — checks continue on GitHub's "
+        "servers even if this tab is closed. Currently fixed to XAU/USD, 15min, "
+        "confidence 75+, every 15 minutes (edit scan.yml on GitHub to change these)."
+    )
+
+    if "background_scanner_error" not in st.session_state:
+        st.session_state.background_scanner_error = None
+
+    status = get_background_scanner_status()
+
+    if status == "active":
+        st.success("● Background scanner is ACTIVE — running on schedule")
+    elif status == "disabled_manually":
+        st.info("○ Background scanner is STOPPED")
+    else:
+        st.warning("Could not determine status — check your GitHub token and repo settings in Secrets.")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Start Background Scanner", disabled=(status == "active")):
+            if set_background_scanner_enabled(True):
+                st.rerun()
+    with col2:
+        if st.button("Stop Background Scanner", disabled=(status == "disabled_manually")):
+            if set_background_scanner_enabled(False):
+                st.rerun()
+
+    if st.session_state.background_scanner_error:
+        st.error(f"GitHub API error: {st.session_state.background_scanner_error}")
+
+    st.caption(
+        "Signals found by the background scanner log to the same Google Sheet "
+        "and, if configured, send an email — check those rather than this app "
+        "for results, since this tab only controls on/off, not live results."
+    )
 
 # ---------------- LIVE CHART (full width, below everything) ----------------
 st.divider()
