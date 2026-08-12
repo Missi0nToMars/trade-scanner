@@ -194,7 +194,7 @@ def send_email(symbol, scan_text, confidence):
     msg["From"] = EMAIL_SENDER
     msg["To"] = EMAIL_RECIPIENT
 
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30) as server:
         server.login(EMAIL_SENDER, EMAIL_APP_PASSWORD)
         server.send_message(msg)
 
