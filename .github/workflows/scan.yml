@@ -34,5 +34,5 @@ jobs:
           EMAIL_RECIPIENT: ${{ secrets.EMAIL_RECIPIENT }}
           SCAN_SYMBOL: "XAU/USD"
           SCAN_INTERVAL: "15min"
-          CONFIDENCE_THRESHOLD: "75"
+          CONFIDENCE_THRESHOLD: "1"
         run: python background_scanner.py
