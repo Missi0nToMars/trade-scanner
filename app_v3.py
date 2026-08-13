@@ -618,14 +618,6 @@ if "scan_interval_minutes" not in st.session_state:
 if "background_scanner_error" not in st.session_state:
     st.session_state.background_scanner_error = None
 
-# Auto-stop the background GitHub Actions scanner once per session when the
-# app is opened, so it never keeps running unattended just because it was
-# left on from a previous session.
-if "auto_stopped_background_scanner" not in st.session_state:
-    st.session_state.auto_stopped_background_scanner = True
-    if get_background_scanner_status() == "active":
-        set_background_scanner_enabled(False)
-
 tab_manual, tab_auto, tab_background = st.tabs(["Manual Scan", "Auto Scanning", "Background Scanner"])
 
 # ---------------- MANUAL SCAN TAB ----------------
