@@ -46,7 +46,9 @@ Risk:Reward Verification: Before finalizing any recommendation, explicitly compu
 
 Confidence Score Calibration: Do not default to a habitual middle-range number. Build the score explicitly: list each confirming factor present (trend alignment, structure confluence, volume/proxy conviction, momentum, higher-timeframe agreement) and each detracting factor (conflicting signals, weak follow-through, proximity to resistance, choppiness), then derive the score from the actual count and strength of each — more confirmations with no major detractors should score notably higher (80s-90s), while few confirmations or several detractors should score notably lower (50s-low 60s). Before finalizing, explicitly check whether the evidence actually supports a score in the 40s, 80s, or 90s rather than defaulting toward the middle of the range.
 
-Economic Calendar Awareness: If upcoming high-impact economic events (e.g. NFP, FOMC, CPI) are listed in the provided context, treat any event occurring within the trade's potential 1.5-hour hold window as a meaningful risk factor. Price action can become erratic and disconnected from normal technical structure in the minutes before and after such a release. Reduce confidence accordingly, and if a major release falls within roughly 30 minutes before or during the likely hold window, lean toward declining the trade even if the technical setup otherwise looks strong — note this explicitly as the reason. This applies regardless of instrument, since USD releases affect gold, forex, crypto, and most major stocks."""
+Economic Calendar Awareness: If upcoming high-impact economic events (e.g. NFP, FOMC, CPI) are listed in the provided context, treat any event occurring within the trade's potential 1.5-hour hold window as a meaningful risk factor. Price action can become erratic and disconnected from normal technical structure in the minutes before and after such a release. Reduce confidence accordingly, and if a major release falls within roughly 30 minutes before or during the likely hold window, lean toward declining the trade even if the technical setup otherwise looks strong — note this explicitly as the reason. This applies regardless of instrument, since USD releases affect gold, forex, crypto, and most major stocks.
+
+Take-Profit Realism: Prefer the nearest meaningful structural level as the take-profit target — a prior swing high/low, a round-number level, or the edge of recent consolidation — rather than a full measured-move or impulse-leg extension projected further out. Extended projections (e.g. 1x or 1.5x the size of the prior impulse leg) assume the next move matches the last one's full size, which is an optimistic assumption more often than a realistic one; price frequently reverses partway through such a projection without reaching it. Only reach for a more distant target if the nearest structural level fails to clear the 1.5:1 R:R minimum — and even then, prefer the closest level that does clear it over the most optimistic one available."""
 
 # ---------------- Full prompt (manual scans): shared core + full written format ----------------
 
@@ -613,6 +615,16 @@ if "auto_interval" not in st.session_state:
     st.session_state.auto_interval = "15min"
 if "scan_interval_minutes" not in st.session_state:
     st.session_state.scan_interval_minutes = DEFAULT_SCAN_INTERVAL_MINUTES
+if "background_scanner_error" not in st.session_state:
+    st.session_state.background_scanner_error = None
+
+# Auto-stop the background GitHub Actions scanner once per session when the
+# app is opened, so it never keeps running unattended just because it was
+# left on from a previous session.
+if "auto_stopped_background_scanner" not in st.session_state:
+    st.session_state.auto_stopped_background_scanner = True
+    if get_background_scanner_status() == "active":
+        set_background_scanner_enabled(False)
 
 tab_manual, tab_auto, tab_background = st.tabs(["Manual Scan", "Auto Scanning", "Background Scanner"])
 
