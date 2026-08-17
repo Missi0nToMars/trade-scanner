@@ -26,6 +26,7 @@ DEFAULT_CONFIDENCE_THRESHOLD = 75
 INTERVAL_TO_MINUTES = {"1min": 1, "5min": 5, "15min": 15, "30min": 30, "1h": 60}
 INTERVAL_TO_CANDLES = {"1min": 100, "5min": 60, "15min": 50, "30min": 40, "1h": 30}
 INTERVAL_TO_TV_CODE = {"1min": "1", "5min": "5", "15min": "15", "30min": "30", "1h": "60"}
+INTERVAL_TO_EXPIRY_MINUTES = {"1min": 5, "5min": 15, "15min": 30, "30min": 45, "1h": 60}
 
 
 # ---------------- Shared core framework (identical text used by BOTH prompts) ----------------
@@ -48,7 +49,9 @@ Confidence Score Calibration: Do not default to a habitual middle-range number. 
 
 Economic Calendar Awareness: If upcoming high-impact economic events (e.g. NFP, FOMC, CPI) are listed in the provided context, treat any event occurring within the trade's potential 1.5-hour hold window as a meaningful risk factor. Price action can become erratic and disconnected from normal technical structure in the minutes before and after such a release. Reduce confidence accordingly, and if a major release falls within roughly 30 minutes before or during the likely hold window, lean toward declining the trade even if the technical setup otherwise looks strong — note this explicitly as the reason. This applies regardless of instrument, since USD releases affect gold, forex, crypto, and most major stocks.
 
-Take-Profit Realism: Prefer the nearest meaningful structural level as the take-profit target — a prior swing high/low, a round-number level, or the edge of recent consolidation — rather than a full measured-move or impulse-leg extension projected further out. Extended projections (e.g. 1x or 1.5x the size of the prior impulse leg) assume the next move matches the last one's full size, which is an optimistic assumption more often than a realistic one; price frequently reverses partway through such a projection without reaching it. Only reach for a more distant target if the nearest structural level fails to clear the 1.5:1 R:R minimum — and even then, prefer the closest level that does clear it over the most optimistic one available."""
+Take-Profit Realism: Prefer the nearest meaningful structural level as the take-profit target — a prior swing high/low, a round-number level, or the edge of recent consolidation — rather than a full measured-move or impulse-leg extension projected further out. Extended projections (e.g. 1x or 1.5x the size of the prior impulse leg) assume the next move matches the last one's full size, which is an optimistic assumption more often than a realistic one; price frequently reverses partway through such a projection without reaching it. Only reach for a more distant target if the nearest structural level fails to clear the 1.5:1 R:R minimum — and even then, prefer the closest level that does clear it over the most optimistic one available.
+
+ATR-Based Stop Sizing: A precomputed Average True Range (ATR) value is provided in the data context whenever available — always use this exact value rather than estimating your own from the raw candles. The distance between entry and stop-loss should be at least 1x the provided ATR, and ideally 1.2-1.5x ATR when structure allows. A stop tighter than 1x ATR is highly vulnerable to being triggered by ordinary price noise rather than a genuine break of structure, even when the directional read was correct. If the nearest structural level would require a stop tighter than 1x ATR, widen the stop to at least 1x ATR and adjust the take-profit target proportionally to preserve the 1.5:1 R:R minimum, rather than using an overly tight stop just because it sits at a convenient nearby structural point."""
 
 # ---------------- Full prompt (manual scans): shared core + full written format ----------------
 
@@ -84,6 +87,23 @@ TAKE_PROFIT: <price, or N/A>
 INVALIDATION: <one short line describing what proves the setup wrong, or N/A>
 
 The calibration and verification steps above still happen in full every time — only the final printed output is trimmed down to these six lines."""
+
+
+def calculate_atr(candles, period=14):
+    """Average True Range, calculated properly from actual price data
+    instead of being estimated/guessed by the model. Returns None if there
+    isn't enough data yet."""
+    if not candles or len(candles) < period + 1:
+        return None
+    true_ranges = []
+    for i in range(1, len(candles)):
+        high = float(candles[i]["high"])
+        low = float(candles[i]["low"])
+        prev_close = float(candles[i - 1]["close"])
+        tr = max(high - low, abs(high - prev_close), abs(low - prev_close))
+        true_ranges.append(tr)
+    recent = true_ranges[-period:]
+    return sum(recent) / len(recent)
 
 
 def get_intraday_data(symbol, interval, size=50):
@@ -171,11 +191,21 @@ def build_data_message(symbol, interval, price_data, daily_data, instruction):
     )
     economic_events = get_upcoming_economic_events_cached()
     economic_context_text = format_economic_events_context(economic_events)
+
+    atr = calculate_atr(price_data)
+    atr_text = (
+        f"\n\nCalculated ATR (14-period, {interval} candles): {atr:.5f} — use this precomputed value "
+        f"for stop-loss sizing per the ATR-Based Stop Sizing rule, do not estimate your own."
+        if atr is not None else
+        "\n\n(Not enough candles yet to calculate a reliable ATR.)"
+    )
+
     return (
         f"Here is {symbol} price data at {interval} candles, "
         f"most recent {len(price_data)} candles, oldest to newest:\n\n"
         f"{price_data_text}"
         f"{daily_context_text}"
+        f"{atr_text}"
         f"{economic_context_text}\n\n"
         f"{instruction}"
     )
@@ -194,23 +224,45 @@ def parse_price_field(scan_text, field_name):
     return None
 
 
-def check_signal_staleness(scan_text, current_price):
-    """Compare a signal's entry price against the current live price and flag
-    if price has already moved past it, since the AI can't know the price at
-    the exact moment the user reads the card — only the app can check that."""
+def get_entry_status(scan_text, current_price, created_at=None, interval=None):
+    """Compare the live price against entry/stop/target to tell the user
+    exactly where things stand: expired, still waiting for entry, already
+    triggered, stop breached, or target reached. Returns a short sentence,
+    or None if it can't be determined (missing price or fields)."""
     if current_price is None:
         return None
     entry = parse_price_field(scan_text, "ENTRY")
+    stop_loss = parse_price_field(scan_text, "STOP_LOSS")
     take_profit = parse_price_field(scan_text, "TAKE_PROFIT")
-    if entry is None or take_profit is None:
+    if entry is None or stop_loss is None or take_profit is None:
         return None
 
     is_long = take_profit > entry  # direction inferred from where the target sits
-    if is_long and current_price > entry:
-        return f"⚠ Price has already moved past this entry (now {current_price:.5f} vs entry {entry:.5f})"
-    if not is_long and current_price < entry:
-        return f"⚠ Price has already moved past this entry (now {current_price:.5f} vs entry {entry:.5f})"
-    return None
+
+    if is_long:
+        if current_price <= stop_loss:
+            return "🛑 Stop-loss level already breached — this setup is invalidated."
+        if current_price >= take_profit:
+            return "✅ Take-profit level already reached — target hit."
+        if current_price >= entry:
+            return "▶ Entry already reached — price is at or above this level."
+    else:
+        if current_price >= stop_loss:
+            return "🛑 Stop-loss level already breached — this setup is invalidated."
+        if current_price <= take_profit:
+            return "✅ Take-profit level already reached — target hit."
+        if current_price <= entry:
+            return "▶ Entry already reached — price is at or below this level."
+
+    # Still waiting for entry — check whether it's expired given how long
+    # it's been, scaled to the candle interval it was found on.
+    if created_at is not None and interval is not None:
+        age_minutes = (time.time() - created_at) / 60
+        expiry_minutes = INTERVAL_TO_EXPIRY_MINUTES.get(interval, 30)
+        if age_minutes >= expiry_minutes:
+            return f"⌛ Expired — still waiting after {int(age_minutes)}min (window was {expiry_minutes}min for {interval} candles). Conditions may have changed."
+
+    return "⏳ Waiting — price hasn't reached this entry level yet."
 
 
 def get_upcoming_economic_events(hours_ahead=3):
@@ -810,6 +862,8 @@ with tab_auto:
                             if confidence is not None and confidence >= st.session_state.confidence_threshold:
                                 st.session_state.signals.insert(0, {
                                     "id": f"{datetime.now().timestamp()}",
+                                    "created_at": time.time(),
+                                    "interval": st.session_state.auto_interval,
                                     "time": datetime.now().strftime("%H:%M:%S"),
                                     "symbol": st.session_state.auto_symbol,
                                     "text": scan_text,
@@ -857,8 +911,23 @@ with tab_auto:
                 else:
                     tier_color, tier_label = "#4FD1C5", "SIGNAL"
 
-                body_html = html.escape(sig["text"]).replace("\n", "<br>")
-                staleness_warning = check_signal_staleness(sig["text"], st.session_state.last_price)
+                entry_status = get_entry_status(
+                    sig["text"], st.session_state.last_price,
+                    created_at=sig.get("created_at"), interval=sig.get("interval"),
+                )
+
+                # Escape first, then inject the status sentence right after
+                # the ENTRY line specifically, then convert newlines to <br>
+                escaped_text = html.escape(sig["text"])
+                if entry_status:
+                    escaped_status = html.escape(entry_status)
+                    lines = escaped_text.split("\n")
+                    for idx, line in enumerate(lines):
+                        if line.strip().upper().startswith("ENTRY:"):
+                            lines[idx] = line + f"  <span style='color:#7A8199; font-size:0.8rem;'>({escaped_status})</span>"
+                            break
+                    escaped_text = "\n".join(lines)
+                body_html = escaped_text.replace("\n", "<br>")
 
                 close_col, card_col = st.columns([0.05, 0.95])
                 with close_col:
@@ -869,15 +938,6 @@ with tab_auto:
                             if s.get("id", s["time"]) != sig.get("id", sig["time"])
                         ]
                 with card_col:
-                    stale_html = ""
-                    if staleness_warning:
-                        stale_html = (
-                            "<div style='background-color:#3A2A1A; color:#E8B25F; border-radius:3px; "
-                            "padding:6px 10px; font-family:\"IBM Plex Mono\", monospace; "
-                            "font-size:0.78rem; margin-bottom:10px;'>"
-                            + html.escape(staleness_warning) + "</div>"
-                        )
-
                     card_html = (
                         "<div style='background-color:#131829; border-left:4px solid " + tier_color + "; "
                         "border-radius:4px; padding:14px 18px; margin-bottom:12px;'>"
@@ -888,7 +948,6 @@ with tab_auto:
                         "<span style='color:#7A8199; font-family:\"IBM Plex Mono\", monospace; "
                         "font-weight:400;'>" + html.escape(sig['time']) + "</span>"
                         "</div>"
-                        + stale_html +
                         "<div style='font-family:\"IBM Plex Mono\", monospace; font-size:0.85rem; "
                         "color:#E8EAF0; line-height:1.6; white-space:pre-wrap;'>" + body_html + "</div>"
                         "</div>"
