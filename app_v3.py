@@ -669,6 +669,8 @@ if "scan_interval_minutes" not in st.session_state:
     st.session_state.scan_interval_minutes = DEFAULT_SCAN_INTERVAL_MINUTES
 if "background_scanner_error" not in st.session_state:
     st.session_state.background_scanner_error = None
+if "last_status_price_check" not in st.session_state:
+    st.session_state.last_status_price_check = 0
 
 tab_manual, tab_auto, tab_background = st.tabs(["Manual Scan", "Auto Scanning", "Background Scanner"])
 
@@ -897,6 +899,35 @@ with tab_auto:
 
             if st.session_state.last_sheet_error:
                 st.error(f"Sheet logging failed: {st.session_state.last_sheet_error}")
+
+        elif st.session_state.signals:
+            # Scanning is stopped, but signals still exist with statuses to
+            # track. Do a lightweight price-only refresh (no Claude call, so
+            # no cost) every 30s so statuses keep reflecting real prices
+            # instead of freezing at whatever price was last fetched.
+            status.markdown(
+                "<span style='font-family:\"IBM Plex Mono\", monospace; color:#7A8199;'>"
+                "○ Scanning stopped — tracking live prices only (no new analysis, no cost)</span>",
+                unsafe_allow_html=True,
+            )
+            seconds_since_status_check = time.time() - st.session_state.last_status_price_check
+            if seconds_since_status_check >= 30:
+                price_data, error = get_intraday_data(
+                    st.session_state.auto_symbol,
+                    st.session_state.auto_interval,
+                    size=5,  # only need the latest close, keep this cheap
+                )
+                if price_data:
+                    st.session_state.prev_price = st.session_state.last_price
+                    st.session_state.last_price = float(price_data[-1]["close"])
+                st.session_state.last_status_price_check = time.time()
+
+            if st.session_state.last_price is not None:
+                with metrics_row.container():
+                    st.metric(
+                        label=f"{st.session_state.auto_symbol} — last price",
+                        value=f"{st.session_state.last_price:.8f}".rstrip("0").rstrip("."),
+                    )
 
         if st.session_state.signals:
             st.markdown(
