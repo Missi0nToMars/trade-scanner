@@ -56,7 +56,9 @@ Confidence Score Calibration: Do not default to a habitual middle-range number. 
 
 Economic Calendar Awareness: If upcoming high-impact economic events (e.g. NFP, FOMC, CPI) are listed in the provided context, treat any event occurring within the trade's potential 1.5-hour hold window as a meaningful risk factor. Price action can become erratic and disconnected from normal technical structure in the minutes before and after such a release. Reduce confidence accordingly, and if a major release falls within roughly 30 minutes before or during the likely hold window, lean toward declining the trade even if the technical setup otherwise looks strong — note this explicitly as the reason. This applies regardless of instrument, since USD releases affect gold, forex, crypto, and most major stocks.
 
-Take-Profit Realism: Prefer the nearest meaningful structural level as the take-profit target — a prior swing high/low, a round-number level, or the edge of recent consolidation — rather than a full measured-move or impulse-leg extension projected further out. Extended projections (e.g. 1x or 1.5x the size of the prior impulse leg) assume the next move matches the last one's full size, which is an optimistic assumption more often than a realistic one; price frequently reverses partway through such a projection without reaching it. Only reach for a more distant target if the nearest structural level fails to clear the 1.5:1 R:R minimum — and even then, prefer the closest level that does clear it over the most optimistic one available."""
+Take-Profit Realism: Prefer the nearest meaningful structural level as the take-profit target — a prior swing high/low, a round-number level, or the edge of recent consolidation — rather than a full measured-move or impulse-leg extension projected further out. Extended projections (e.g. 1x or 1.5x the size of the prior impulse leg) assume the next move matches the last one's full size, which is an optimistic assumption more often than a realistic one; price frequently reverses partway through such a projection without reaching it. Only reach for a more distant target if the nearest structural level fails to clear the 1.5:1 R:R minimum — and even then, prefer the closest level that does clear it over the most optimistic one available.
+
+ATR-Based Stop Sizing: A precomputed Average True Range (ATR) value is provided in the data context whenever available — always use this exact value rather than estimating your own from the raw candles. The distance between entry and stop-loss should be at least 1x the provided ATR, and ideally 1.2-1.5x ATR when structure allows. A stop tighter than 1x ATR is highly vulnerable to being triggered by ordinary price noise rather than a genuine break of structure, even when the directional read was correct. If the nearest structural level would require a stop tighter than 1x ATR, widen the stop to at least 1x ATR and adjust the take-profit target proportionally to preserve the 1.5:1 R:R minimum, rather than using an overly tight stop just because it sits at a convenient nearby structural point."""
 
 TRADING_STRATEGY_SCAN = CORE_STRATEGY_FRAMEWORK + """
 
@@ -70,6 +72,22 @@ TAKE_PROFIT: <price, or N/A>
 INVALIDATION: <one short line describing what proves the setup wrong, or N/A>
 
 The calibration and verification steps above still happen in full every time — only the final printed output is trimmed down to these six lines."""
+
+
+def calculate_atr(candles, period=14):
+    """Average True Range, calculated properly from actual price data
+    instead of being estimated/guessed by the model."""
+    if not candles or len(candles) < period + 1:
+        return None
+    true_ranges = []
+    for i in range(1, len(candles)):
+        high = float(candles[i]["high"])
+        low = float(candles[i]["low"])
+        prev_close = float(candles[i - 1]["close"])
+        tr = max(high - low, abs(high - prev_close), abs(low - prev_close))
+        true_ranges.append(tr)
+    recent = true_ranges[-period:]
+    return sum(recent) / len(recent)
 
 
 def get_intraday_data(symbol, interval, size):
@@ -216,6 +234,13 @@ def main():
         f"\n\nHigher timeframe context — last 20 daily candles:\n{json.dumps(daily_data, indent=2)}"
         if daily_data else "\n\n(Daily context unavailable.)"
     )
+    atr = calculate_atr(price_data)
+    atr_text = (
+        f"\n\nCalculated ATR (14-period, {INTERVAL} candles): {atr:.5f} — use this precomputed value "
+        f"for stop-loss sizing per the ATR-Based Stop Sizing rule, do not estimate your own."
+        if atr is not None else
+        "\n\n(Not enough candles yet to calculate a reliable ATR.)"
+    )
     events_text = (
         "\n\nUpcoming High-Impact Economic Events: None scheduled in the next few hours."
         if not events else
@@ -225,7 +250,7 @@ def main():
     content = (
         f"Here is {SYMBOL} price data at {INTERVAL} candles, most recent {len(price_data)} candles, "
         f"oldest to newest:\n\n{json.dumps(price_data, indent=2)}"
-        f"{daily_text}{events_text}\n\n"
+        f"{daily_text}{atr_text}{events_text}\n\n"
         "Give a scan reading in the exact trimmed format specified."
     )
 
