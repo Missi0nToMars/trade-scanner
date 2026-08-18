@@ -224,35 +224,41 @@ def parse_price_field(scan_text, field_name):
     return None
 
 
-def get_entry_status(scan_text, current_price, created_at=None, interval=None):
+def get_entry_status(scan_text, current_price, created_at=None, interval=None, already_triggered=False):
     """Compare the live price against entry/stop/target to tell the user
     exactly where things stand: expired, still waiting for entry, already
-    triggered, stop breached, or target reached. Returns a short sentence,
-    or None if it can't be determined (missing price or fields)."""
+    triggered, stop breached, or target reached.
+
+    Returns (status_text, is_now_triggered). Once a signal has genuinely
+    reached entry, is_now_triggered stays True from then on — a real trade
+    doesn't "un-trigger" just because price wobbles back near entry without
+    hitting the stop, so the caller should persist this flag on the signal
+    rather than recomputing it fresh from price alone each time.
+    """
     if current_price is None:
-        return None
+        return None, already_triggered
     entry = parse_price_field(scan_text, "ENTRY")
     stop_loss = parse_price_field(scan_text, "STOP_LOSS")
     take_profit = parse_price_field(scan_text, "TAKE_PROFIT")
     if entry is None or stop_loss is None or take_profit is None:
-        return None
+        return None, already_triggered
 
     is_long = take_profit > entry  # direction inferred from where the target sits
 
     if is_long:
         if current_price <= stop_loss:
-            return "🛑 Stop-loss level already breached — this setup is invalidated."
+            return "🛑 Stop-loss level already breached — this setup is invalidated.", True
         if current_price >= take_profit:
-            return "✅ Take-profit level already reached — target hit."
-        if current_price >= entry:
-            return "▶ Entry already reached — price is at or above this level."
+            return "✅ Take-profit level already reached — target hit.", True
+        if already_triggered or current_price >= entry:
+            return "▶ Entry reached — trade may be active, now watching for stop/target.", True
     else:
         if current_price >= stop_loss:
-            return "🛑 Stop-loss level already breached — this setup is invalidated."
+            return "🛑 Stop-loss level already breached — this setup is invalidated.", True
         if current_price <= take_profit:
-            return "✅ Take-profit level already reached — target hit."
-        if current_price <= entry:
-            return "▶ Entry already reached — price is at or below this level."
+            return "✅ Take-profit level already reached — target hit.", True
+        if already_triggered or current_price <= entry:
+            return "▶ Entry reached — trade may be active, now watching for stop/target.", True
 
     # Still waiting for entry — check whether it's expired given how long
     # it's been, scaled to the candle interval it was found on.
@@ -260,9 +266,13 @@ def get_entry_status(scan_text, current_price, created_at=None, interval=None):
         age_minutes = (time.time() - created_at) / 60
         expiry_minutes = INTERVAL_TO_EXPIRY_MINUTES.get(interval, 30)
         if age_minutes >= expiry_minutes:
-            return f"⌛ Expired — still waiting after {int(age_minutes)}min (window was {expiry_minutes}min for {interval} candles). Conditions may have changed."
+            return (
+                f"⌛ Expired — still waiting after {int(age_minutes)}min "
+                f"(window was {expiry_minutes}min for {interval} candles). Conditions may have changed.",
+                False,
+            )
 
-    return "⏳ Waiting — price hasn't reached this entry level yet."
+    return "⏳ Waiting — price hasn't reached this entry level yet.", False
 
 
 def get_upcoming_economic_events(hours_ahead=3):
@@ -903,7 +913,7 @@ with tab_auto:
         elif st.session_state.signals:
             # Scanning is stopped, but signals still exist with statuses to
             # track. Do a lightweight price-only refresh (no Claude call, so
-            # no cost) every 30s so statuses keep reflecting real prices
+            # no cost) every 15s so statuses keep reflecting real prices
             # instead of freezing at whatever price was last fetched.
             status.markdown(
                 "<span style='font-family:\"IBM Plex Mono\", monospace; color:#7A8199;'>"
@@ -911,7 +921,7 @@ with tab_auto:
                 unsafe_allow_html=True,
             )
             seconds_since_status_check = time.time() - st.session_state.last_status_price_check
-            if seconds_since_status_check >= 30:
+            if seconds_since_status_check >= 15:
                 price_data, error = get_intraday_data(
                     st.session_state.auto_symbol,
                     st.session_state.auto_interval,
