@@ -952,10 +952,12 @@ with tab_auto:
                 else:
                     tier_color, tier_label = "#4FD1C5", "SIGNAL"
 
-                entry_status = get_entry_status(
+                entry_status, is_triggered_now = get_entry_status(
                     sig["text"], st.session_state.last_price,
                     created_at=sig.get("created_at"), interval=sig.get("interval"),
+                    already_triggered=sig.get("triggered", False),
                 )
+                sig["triggered"] = is_triggered_now
 
                 # Escape first, then inject the status sentence right after
                 # the ENTRY line specifically, then convert newlines to <br>
