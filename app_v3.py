@@ -58,6 +58,7 @@ ATR-Based Stop Sizing: A precomputed Average True Range (ATR) value is provided 
 TRADING_STRATEGY_FULL = CORE_STRATEGY_FRAMEWORK + """
 
 For every analysis, structure your output exactly as follows:
+- Plain-English Summary (2-3 sentences, written for someone who doesn't know trading jargon — state the direction in plain terms, e.g. "gold is trending up," the plan in everyday language, e.g. "wait for it to dip slightly to $X before buying," and what would prove the idea wrong in plain terms, e.g. "if it drops to $Y instead, get out." No technical terms in this section — save those for the detailed fields below.)
 - Detected Strategy
 - Market Regime
 - Confidence Score (0-100)
@@ -67,11 +68,11 @@ For every analysis, structure your output exactly as follows:
 - Invalidation Conditions (what would prove this setup wrong)
 - Risk Assessment (1-2 sentences)
 
-If confidence is below 50, or no strategy fits, output DONT_RECOMMEND with a brief reason instead of the above fields. If the reason for declining is a failed R:R check specifically, do not first print the full structured fields and then append DONT_RECOMMEND — switch entirely to the DONT_RECOMMEND format and explain the R:R shortfall as the reason, without listing the abandoned price levels as if they were a live recommendation.
+If confidence is below 50, or no strategy fits, output DONT_RECOMMEND with a brief reason (still in plain English first, then the technical reason) instead of the above fields. If the reason for declining is a failed R:R check specifically, do not first print the full structured fields and then append DONT_RECOMMEND — switch entirely to the DONT_RECOMMEND format and explain the R:R shortfall as the reason, without listing the abandoned price levels as if they were a live recommendation.
 
 After the initial scan, the user may ask follow-up questions about the analysis. Answer those using the same price data and strategy framework, staying consistent with your original assessment unless the user points out something you missed.
 
-Keep your entire response under 600 words. Do not narrate your reasoning process step-by-step or show your analysis of each strategy candidate — go straight to the final structured output listed above. Only include brief supporting reasoning inline within each field (e.g. one short clause for why that stop-loss level), not separate paragraphs."""
+Keep your entire response under 650 words (the extra room accounts for the plain-English summary). Do not narrate your reasoning process step-by-step or show your analysis of each strategy candidate — go straight to the final structured output listed above. Only include brief supporting reasoning inline within each field (e.g. one short clause for why that stop-loss level), not separate paragraphs."""
 
 # ---------------- Scan prompt (auto-scanning): same shared core + trimmed format ----------------
 
@@ -899,6 +900,33 @@ with tab_auto:
                             }
                         else:
                             confidence = parse_confidence(scan_text)
+
+                            # Self-consistency check: same setups have been proven
+                            # to score wildly differently between calls near a
+                            # decision boundary. Only re-check when it's genuinely
+                            # borderline (within 8 points of threshold) rather than
+                            # doubling cost on every scan — this targets exactly the
+                            # scenario where a lucky/unlucky single roll could flip
+                            # a real decision, without wasting calls on clear cases.
+                            if confidence is not None and abs(confidence - st.session_state.confidence_threshold) <= 8:
+                                confirm_text, confirm_error = call_claude(
+                                    TRADING_STRATEGY_SCAN, [{"role": "user", "content": content}], max_tokens=800
+                                )
+                                confirm_confidence = parse_confidence(confirm_text) if confirm_text else None
+                                if confirm_confidence is not None:
+                                    averaged = round((confidence + confirm_confidence) / 2)
+                                    # Reflect the averaged, more reliable number in
+                                    # what actually gets displayed/logged, so the
+                                    # confidence shown matches the decision made.
+                                    scan_text = re.sub(
+                                        r"CONFIDENCE:\s*\d+",
+                                        f"CONFIDENCE: {averaged}",
+                                        scan_text,
+                                        count=1,
+                                        flags=re.IGNORECASE,
+                                    )
+                                    confidence = averaged
+
                             st.session_state.last_check_debug = {
                                 "time": datetime.now().strftime("%H:%M:%S"),
                                 "error": None if confidence is not None else "Could not parse a confidence value from the response — see raw text below.",
