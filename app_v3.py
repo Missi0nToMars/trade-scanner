@@ -275,6 +275,38 @@ def get_entry_status(scan_text, current_price, created_at=None, interval=None, a
     return "⏳ Waiting — price hasn't reached this entry level yet.", False
 
 
+POSITION_HEALTH_PROMPT = CORE_STRATEGY_FRAMEWORK + """
+
+You are now reviewing a position that has ALREADY BEEN ENTERED — the trade is live, not a new setup to evaluate. You will be given the original trade's entry, stop-loss, take-profit, and invalidation reasoning, plus fresh current price data. Your only job is to judge whether the original thesis still holds.
+
+Do not propose a new trade or new levels. Only assess: has the trend, structure, or momentum that justified this position meaningfully weakened or reversed — even though price hasn't yet hit the stated stop-loss or take-profit? Genuine reasons to flag early concern include: momentum stalling or reversing against the position, a break of intermediate structure that wasn't the original invalidation level but still signals weakening conviction, a sharp rejection candle against the position's direction, or price action becoming choppy/directionless after a clean trend. Do NOT flag concern just because price is moving slowly, or because of ordinary minor pullback within the still-valid structure — only flag genuine deterioration.
+
+Output ONLY these three lines, nothing else:
+
+STATUS: <HOLD or CONSIDER_CLOSING>
+REASON: <one or two sentences explaining your judgment>
+NEW_ASSESSMENT: <one short line on what the structure now looks like>"""
+
+
+def get_position_health(symbol, interval, entry, stop_loss, take_profit, invalidation, direction):
+    """Ask Claude to judge whether an already-triggered position's original
+    thesis still holds, using fresh data. Advisory only — never closes
+    anything automatically; the user decides what to do with the flag."""
+    price_data, error = get_intraday_data(symbol, interval, size=INTERVAL_TO_CANDLES.get(interval, 50))
+    if price_data is None:
+        return None
+    daily_data = get_daily_context(symbol)
+
+    instruction = (
+        f"This {direction} position was entered at {entry}, with stop-loss {stop_loss}, "
+        f"take-profit {take_profit}, and original invalidation condition: {invalidation}. "
+        f"Assess whether the original thesis still holds given the current data."
+    )
+    content = build_data_message(symbol, interval, price_data, daily_data, instruction)
+    result, error = call_claude(POSITION_HEALTH_PROMPT, [{"role": "user", "content": content}], max_tokens=300)
+    return result
+
+
 def get_upcoming_economic_events(hours_ahead=3):
     """Pull high-impact economic events (NFP, FOMC, CPI, etc.) in the next
     few hours from Finnhub's free economic calendar. Returns a list of dicts,
@@ -681,6 +713,8 @@ if "background_scanner_error" not in st.session_state:
     st.session_state.background_scanner_error = None
 if "last_status_price_check" not in st.session_state:
     st.session_state.last_status_price_check = 0
+if "last_health_check_time" not in st.session_state:
+    st.session_state.last_health_check_time = {}
 
 tab_manual, tab_auto, tab_background = st.tabs(["Manual Scan", "Auto Scanning", "Background Scanner"])
 
@@ -959,6 +993,30 @@ with tab_auto:
                 )
                 sig["triggered"] = is_triggered_now
 
+                # Position health check: only for signals that are triggered
+                # AND still open (not already stopped out or at target).
+                # Costs a real Claude call, so throttled to once every 5 min
+                # per signal rather than every fragment refresh.
+                is_still_open = is_triggered_now and entry_status and entry_status.startswith("▶")
+                if is_still_open:
+                    sig_id = sig.get("id", sig["time"])
+                    last_check = st.session_state.last_health_check_time.get(sig_id, 0)
+                    if time.time() - last_check >= 300:  # 5 minutes
+                        entry_val = parse_price_field(sig["text"], "ENTRY")
+                        stop_val = parse_price_field(sig["text"], "STOP_LOSS")
+                        target_val = parse_price_field(sig["text"], "TAKE_PROFIT")
+                        invalidation_match = re.search(r"INVALIDATION:\s*(.+)", sig["text"], re.DOTALL)
+                        invalidation_val = invalidation_match.group(1).strip() if invalidation_match else "N/A"
+                        direction = "long" if target_val and entry_val and target_val > entry_val else "short"
+
+                        health_result = get_position_health(
+                            sig["symbol"], sig.get("interval", "15min"),
+                            entry_val, stop_val, target_val, invalidation_val, direction,
+                        )
+                        if health_result:
+                            sig["health_check"] = health_result
+                        st.session_state.last_health_check_time[sig_id] = time.time()
+
                 # Escape first, then inject the status sentence right after
                 # the ENTRY line specifically, then convert newlines to <br>
                 escaped_text = html.escape(sig["text"])
@@ -981,6 +1039,25 @@ with tab_auto:
                             if s.get("id", s["time"]) != sig.get("id", sig["time"])
                         ]
                 with card_col:
+                    health_html = ""
+                    if sig.get("health_check"):
+                        health_text = sig["health_check"]
+                        status_match = re.search(r"STATUS:\s*(\w+)", health_text)
+                        is_concern = status_match and status_match.group(1).upper() == "CONSIDER_CLOSING"
+                        banner_color = "#E85D4C" if is_concern else "#5FBF77"
+                        banner_bg = "#3A1A1A" if is_concern else "#1A2E1A"
+                        label = "⚠ CONSIDER CLOSING EARLY" if is_concern else "✓ POSITION HEALTH: OK"
+                        reason_match = re.search(r"REASON:\s*(.+?)(?:\nNEW_ASSESSMENT|$)", health_text, re.DOTALL)
+                        reason_text = reason_match.group(1).strip() if reason_match else ""
+                        health_html = (
+                            "<div style='background-color:" + banner_bg + "; border:1px solid " + banner_color + "; "
+                            "color:" + banner_color + "; border-radius:3px; padding:8px 12px; "
+                            "font-family:\"IBM Plex Mono\", monospace; font-size:0.78rem; margin-bottom:10px;'>"
+                            "<div style='font-weight:600; margin-bottom:4px;'>" + html.escape(label) + "</div>"
+                            "<div style='color:#E4E6ED;'>" + html.escape(reason_text) + "</div>"
+                            "</div>"
+                        )
+
                     card_html = (
                         "<div style='background-color:#131829; border-left:4px solid " + tier_color + "; "
                         "border-radius:4px; padding:14px 18px; margin-bottom:12px;'>"
@@ -991,6 +1068,7 @@ with tab_auto:
                         "<span style='color:#7A8199; font-family:\"IBM Plex Mono\", monospace; "
                         "font-weight:400;'>" + html.escape(sig['time']) + "</span>"
                         "</div>"
+                        + health_html +
                         "<div style='font-family:\"IBM Plex Mono\", monospace; font-size:0.85rem; "
                         "color:#E8EAF0; line-height:1.6; white-space:pre-wrap;'>" + body_html + "</div>"
                         "</div>"
