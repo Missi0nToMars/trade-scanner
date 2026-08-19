@@ -720,50 +720,6 @@ tab_manual, tab_auto, tab_background = st.tabs(["Manual Scan", "Auto Scanning", 
 
 # ---------------- MANUAL SCAN TAB ----------------
 with tab_manual:
-    with st.expander("🔬 Latency test: compare Time Series vs Quote endpoint"):
-        st.caption(
-            "One-off diagnostic — fetches both endpoints for the same symbol "
-            "at the same moment so you can compare the prices and timestamps "
-            "against your TradingView chart yourself."
-        )
-        test_symbol = st.text_input("Symbol to test", value="XAU/USD", key="latency_test_symbol")
-        if st.button("Run comparison"):
-            fetch_time = datetime.now().strftime("%H:%M:%S")
-
-            # Method your app currently uses
-            ts_data, ts_error = get_intraday_data(test_symbol, "1min", size=2)
-            ts_price = ts_data[-1]["close"] if ts_data else None
-            ts_timestamp = ts_data[-1]["time"] if ts_data else None
-
-            # The "Quote" REST endpoint — untested for latency, that's what we're checking
-            try:
-                quote_response = requests.get(
-                    "https://api.twelvedata.com/quote",
-                    params={"symbol": test_symbol, "apikey": TWELVE_DATA_KEY},
-                    timeout=10,
-                )
-                quote_data = quote_response.json()
-                quote_price = quote_data.get("close") or quote_data.get("price")
-                quote_timestamp = quote_data.get("datetime") or quote_data.get("timestamp")
-            except Exception as e:
-                quote_price, quote_timestamp = None, f"Error: {e}"
-
-            st.write(f"**Fetched at (your local time):** {fetch_time}")
-            col_a, col_b = st.columns(2)
-            with col_a:
-                st.markdown("**Time Series (current method)**")
-                st.write(f"Price: {ts_price}")
-                st.write(f"Candle timestamp: {ts_timestamp}")
-            with col_b:
-                st.markdown("**Quote endpoint (untested)**")
-                st.write(f"Price: {quote_price}")
-                st.write(f"Timestamp: {quote_timestamp}")
-            st.caption(
-                "Now compare both prices above against your TradingView chart at this "
-                "same moment — whichever is closer to the TradingView price is less delayed."
-            )
-
-
     with st.form("scan_form"):
         col1, col2 = st.columns(2)
         with col1:
