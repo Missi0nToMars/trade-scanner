@@ -257,6 +257,20 @@ def main():
     scan_text = call_claude(TRADING_STRATEGY_SCAN, content)
     confidence = parse_confidence(scan_text)
 
+    # Self-consistency check: only re-check when the result is genuinely
+    # borderline (within 8 points of threshold) — this is where a single
+    # noisy call could flip a real decision, without doubling cost on
+    # every clear-cut run.
+    if confidence is not None and abs(confidence - CONFIDENCE_THRESHOLD) <= 8:
+        print(f"Confidence {confidence} is borderline (threshold {CONFIDENCE_THRESHOLD}) — running confirmation check...")
+        confirm_text = call_claude(TRADING_STRATEGY_SCAN, content)
+        confirm_confidence = parse_confidence(confirm_text) if confirm_text else None
+        if confirm_confidence is not None:
+            averaged = round((confidence + confirm_confidence) / 2)
+            print(f"First: {confidence}, Confirmation: {confirm_confidence}, Averaged: {averaged}")
+            scan_text = re.sub(r"CONFIDENCE:\s*\d+", f"CONFIDENCE: {averaged}", scan_text, count=1, flags=re.IGNORECASE)
+            confidence = averaged
+
     print(f"Confidence: {confidence}")
     print(scan_text)
 
