@@ -213,13 +213,19 @@ def build_data_message(symbol, interval, price_data, daily_data, instruction):
 
 
 def parse_price_field(scan_text, field_name):
-    """Extract a numeric price value for a given field label (e.g. ENTRY, TAKE_PROFIT)."""
+    """Extract a numeric price value for a given field label (e.g. ENTRY,
+    TAKE_PROFIT, or 'Entry Price' from the full written format). Tolerant
+    of $ signs, markdown bold (**), and thousands-separator commas, since
+    the full-format output can include any of these around a price."""
     if not scan_text:
         return None
-    match = re.search(rf"{field_name}:\s*([\d.]+(?:e-?\d+)?)", scan_text, re.IGNORECASE)
+    match = re.search(
+        rf"{field_name}:?[\s\*\$]*([\d,]+\.?\d*(?:e-?\d+)?)",
+        scan_text, re.IGNORECASE,
+    )
     if match:
         try:
-            return float(match.group(1))
+            return float(match.group(1).replace(",", ""))
         except ValueError:
             return None
     return None
@@ -431,26 +437,47 @@ def get_trade_queue_sheet():
         return None
 
 
-def queue_trade_instruction(symbol, interval, scan_text):
-    """Write a PENDING trade instruction to the TradeQueue tab. The local
-    MT5 watcher script polls this tab and executes anything marked PENDING.
+def queue_trade_instruction(symbol, interval):
+    """Write a PENDING trade instruction to the TradeQueue tab.
+
+    Rather than trying to regex numbers out of the free-form written manual
+    scan (which has proven unreliable — decorative markdown and inline math
+    formatting can vary in ways that break parsing), this runs one fresh,
+    small call using the same clean six-line structured format the
+    auto-scanner already uses, which has parsed reliably every single time
+    throughout this whole build. Slightly more cost, much more reliable —
+    worth it specifically for something about to place a real order.
+
     Returns True on success, False (with error stored) on failure."""
     sheet = get_trade_queue_sheet()
     if sheet is None:
         return False
     try:
-        entry = parse_price_field(scan_text, "Entry Price") or parse_price_field(scan_text, "ENTRY")
-        stop_loss = parse_price_field(scan_text, "Stop Loss Price") or parse_price_field(scan_text, "STOP_LOSS")
-        take_profit = parse_price_field(scan_text, "Take Profit Price") or parse_price_field(scan_text, "TAKE_PROFIT")
+        price_data, error = get_intraday_data(symbol, interval, size=INTERVAL_TO_CANDLES.get(interval, 50))
+        if price_data is None:
+            st.session_state.last_sheet_error = f"Could not fetch fresh price data to confirm trade: {error}"
+            return False
+        daily_data = get_daily_context(symbol)
+        instruction = "Give a scan reading in the exact trimmed format specified."
+        content = build_data_message(symbol, interval, price_data, daily_data, instruction)
+        scan_text, error = call_claude(TRADING_STRATEGY_SCAN, [{"role": "user", "content": content}], max_tokens=800)
+
+        if scan_text is None:
+            st.session_state.last_sheet_error = f"Could not confirm trade details: {error}"
+            return False
+
+        entry = parse_price_field(scan_text, "ENTRY")
+        stop_loss = parse_price_field(scan_text, "STOP_LOSS")
+        take_profit = parse_price_field(scan_text, "TAKE_PROFIT")
         if entry is None or stop_loss is None or take_profit is None:
-            st.session_state.last_sheet_error = "Could not find Entry/Stop/Target values in this scan to queue."
+            st.session_state.last_sheet_error = (
+                "The confirmation check didn't return a valid trade "
+                "(setup may no longer be live at this exact moment)."
+            )
             return False
 
         direction = "long" if take_profit > entry else "short"
-
-        invalidation_match = re.search(
-            r"Invalidation Conditions?:?\s*(.+?)(?:\n\n|Risk Assessment|$)", scan_text, re.DOTALL
-        )
+        invalidation_match = re.search(r"INVALIDATION:\s*(.+)", scan_text, re.DOTALL)
         invalidation = invalidation_match.group(1).strip() if invalidation_match else "See original scan."
 
         sheet.append_row([
@@ -839,12 +866,13 @@ with tab_manual:
         if original_scan_text and "DONT_RECOMMEND" not in original_scan_text.upper():
             st.divider()
             st.caption(
-                "This queues the trade for your local MT5 watcher script — it will "
-                "not execute here in the browser. Make sure the watcher is running "
-                "on your computer before clicking this."
+                "This re-confirms the setup with a fresh check, then queues it for your "
+                "local MT5 watcher script — it will not execute here in the browser. "
+                "Make sure the watcher is running on your computer before clicking this."
             )
             if st.button("🚀 Place Trade (send to local MT5 watcher)"):
-                success = queue_trade_instruction(symbol, interval, original_scan_text)
+                with st.spinner("Confirming setup is still valid and queuing..."):
+                    success = queue_trade_instruction(symbol, interval)
                 if success:
                     st.success("Trade instruction queued — your local watcher will pick it up shortly.")
                 else:
