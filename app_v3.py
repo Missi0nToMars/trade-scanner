@@ -409,6 +409,69 @@ def set_background_scanner_enabled(enable: bool):
         return False
 
 
+def get_trade_queue_sheet():
+    """Connect to the 'TradeQueue' tab (a second sheet within the same
+    spreadsheet) used to hand off trade instructions to the local MT5
+    watcher script. Same credentials as the main log, different worksheet."""
+    try:
+        scopes = [
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive",
+        ]
+        creds = Credentials.from_service_account_info(
+            st.secrets["gcp_service_account"], scopes=scopes
+        )
+        client = gspread.authorize(creds)
+        spreadsheet = client.open(st.secrets["SHEET_NAME"])
+        sheet = spreadsheet.worksheet("TradeQueue")
+        st.session_state.last_sheet_error = None
+        return sheet
+    except Exception as e:
+        st.session_state.last_sheet_error = f"{type(e).__name__}: {e}"
+        return None
+
+
+def queue_trade_instruction(symbol, interval, scan_text):
+    """Write a PENDING trade instruction to the TradeQueue tab. The local
+    MT5 watcher script polls this tab and executes anything marked PENDING.
+    Returns True on success, False (with error stored) on failure."""
+    sheet = get_trade_queue_sheet()
+    if sheet is None:
+        return False
+    try:
+        entry = parse_price_field(scan_text, "Entry Price") or parse_price_field(scan_text, "ENTRY")
+        stop_loss = parse_price_field(scan_text, "Stop Loss Price") or parse_price_field(scan_text, "STOP_LOSS")
+        take_profit = parse_price_field(scan_text, "Take Profit Price") or parse_price_field(scan_text, "TAKE_PROFIT")
+        if entry is None or stop_loss is None or take_profit is None:
+            st.session_state.last_sheet_error = "Could not find Entry/Stop/Target values in this scan to queue."
+            return False
+
+        direction = "long" if take_profit > entry else "short"
+
+        invalidation_match = re.search(
+            r"Invalidation Conditions?:?\s*(.+?)(?:\n\n|Risk Assessment|$)", scan_text, re.DOTALL
+        )
+        invalidation = invalidation_match.group(1).strip() if invalidation_match else "See original scan."
+
+        sheet.append_row([
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "PENDING",
+            symbol,
+            direction,
+            entry,
+            stop_loss,
+            take_profit,
+            invalidation,
+            interval,
+            "0.01",  # default lot size — adjust directly in the sheet if needed before the watcher picks it up
+        ])
+        st.session_state.last_sheet_error = None
+        return True
+    except Exception as e:
+        st.session_state.last_sheet_error = f"{type(e).__name__}: {e}"
+        return False
+
+
 def get_sheet():
     """Connect to the Google Sheet used for logging signals. Stores any
     error in session_state for display, rather than failing completely
@@ -768,6 +831,24 @@ with tab_manual:
             elif msg["role"] == "user" and i != 0:
                 with st.chat_message("user"):
                     st.markdown(msg["content"])
+
+        # Only offer to place a trade for the ORIGINAL scan result (not a
+        # follow-up chat reply), and only when it's an actual recommendation.
+        latest_assistant_msgs = [m for m in st.session_state.conversation if m["role"] == "assistant"]
+        original_scan_text = latest_assistant_msgs[0]["content"] if latest_assistant_msgs else ""
+        if original_scan_text and "DONT_RECOMMEND" not in original_scan_text.upper():
+            st.divider()
+            st.caption(
+                "This queues the trade for your local MT5 watcher script — it will "
+                "not execute here in the browser. Make sure the watcher is running "
+                "on your computer before clicking this."
+            )
+            if st.button("🚀 Place Trade (send to local MT5 watcher)"):
+                success = queue_trade_instruction(symbol, interval, original_scan_text)
+                if success:
+                    st.success("Trade instruction queued — your local watcher will pick it up shortly.")
+                else:
+                    st.error(f"Could not queue trade: {st.session_state.last_sheet_error}")
 
         question = st.chat_input("Ask a follow-up question about this analysis")
         if question:
