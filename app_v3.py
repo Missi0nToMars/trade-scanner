@@ -480,6 +480,26 @@ def queue_trade_instruction(symbol, interval):
         invalidation_match = re.search(r"INVALIDATION:\s*(.+)", scan_text, re.DOTALL)
         invalidation = invalidation_match.group(1).strip() if invalidation_match else "See original scan."
 
+        # Position sizing by confidence tier: targets $1500 MARGIN allocated
+        # for confidence 62-70, $4000 margin for 71+ (not position value —
+        # confirmed against the user's TradingView reference, where $3000
+        # margin at ~1:50 leverage bought 33 units, producing the same
+        # +$150 to +$400 typical win range this sizing reproduces at 1:100).
+        confidence = parse_confidence(scan_text)
+        target_margin = 4000 if (confidence is not None and confidence >= 71) else 1500
+        gold_contract_size = 100  # oz per standard lot — standard for XAU/USD
+        account_leverage = 100    # matches your MT5 demo account — update if your real account differs
+        broker_min_lot = 0.01     # typical MT5 minimum
+
+        raw_lot = (target_margin * account_leverage) / (gold_contract_size * entry)
+        lot_size = round(max(raw_lot, broker_min_lot), 2)
+        actual_margin = (lot_size * gold_contract_size * entry) / account_leverage
+
+        st.session_state.last_queue_sizing_info = (
+            f"Confidence {confidence} -> targeted ${target_margin:,} margin — "
+            f"using {lot_size} lots (~${actual_margin:,.0f} actual margin at 1:{account_leverage})."
+        )
+
         sheet.append_row([
             datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "PENDING",
@@ -490,7 +510,7 @@ def queue_trade_instruction(symbol, interval):
             take_profit,
             invalidation,
             interval,
-            "0.01",  # default lot size — adjust directly in the sheet if needed before the watcher picks it up
+            lot_size,
         ])
         st.session_state.last_sheet_error = None
         return True
@@ -875,6 +895,8 @@ with tab_manual:
                     success = queue_trade_instruction(symbol, interval)
                 if success:
                     st.success("Trade instruction queued — your local watcher will pick it up shortly.")
+                    if st.session_state.get("last_queue_sizing_info"):
+                        st.caption(st.session_state.last_queue_sizing_info)
                 else:
                     st.error(f"Could not queue trade: {st.session_state.last_sheet_error}")
 
