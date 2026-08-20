@@ -816,7 +816,7 @@ with tab_manual:
         with col1:
             symbol = st.text_input("Stock symbol", value="XAU/USD")
         with col2:
-            interval = st.selectbox("Interval", ["5min", "15min", "30min", "1h"], index=1)
+            interval = st.selectbox("Interval", ["1min", "5min", "15min", "30min", "1h"], index=2)
         run_scan = st.form_submit_button("Run Scan")
 
     if run_scan:
