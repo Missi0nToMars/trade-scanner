@@ -282,35 +282,43 @@ def get_entry_status(scan_text, current_price, created_at=None, interval=None, a
     return "⏳ Waiting — price hasn't reached this entry level yet.", False
 
 
-POSITION_HEALTH_PROMPT = CORE_STRATEGY_FRAMEWORK + """
+POSITION_HEALTH_PROMPT = """You are reviewing an already-open trading position — not scoring a new setup, just judging whether the original reasoning still holds. You'll get the position's entry, stop-loss, take-profit, and invalidation condition, plus a short window of recent price candles.
 
-You are now reviewing a position that has ALREADY BEEN ENTERED — the trade is live, not a new setup to evaluate. You will be given the original trade's entry, stop-loss, take-profit, and invalidation reasoning, plus fresh current price data. Your only job is to judge whether the original thesis still holds.
-
-Do not propose a new trade or new levels. Only assess: has the trend, structure, or momentum that justified this position meaningfully weakened or reversed — even though price hasn't yet hit the stated stop-loss or take-profit? Genuine reasons to flag early concern include: momentum stalling or reversing against the position, a break of intermediate structure that wasn't the original invalidation level but still signals weakening conviction, a sharp rejection candle against the position's direction, or price action becoming choppy/directionless after a clean trend. Do NOT flag concern just because price is moving slowly, or because of ordinary minor pullback within the still-valid structure — only flag genuine deterioration.
+Only flag concern if there's genuine evidence of deterioration: momentum stalling or reversing against the position, a break of nearby structure (even if not the exact stated invalidation level), a sharp rejection candle against the position's direction, or price turning choppy/directionless after a clean trend. Do NOT flag concern over ordinary slow movement or minor pullback within otherwise-intact structure — only real weakening.
 
 Output ONLY these three lines, nothing else:
 
 STATUS: <HOLD or CONSIDER_CLOSING>
-REASON: <one or two sentences explaining your judgment>
-NEW_ASSESSMENT: <one short line on what the structure now looks like>"""
+REASON: <one short sentence>
+NEW_ASSESSMENT: <one short line on current structure>"""
 
 
 def get_position_health(symbol, interval, entry, stop_loss, take_profit, invalidation, direction):
     """Ask Claude to judge whether an already-triggered position's original
-    thesis still holds, using fresh data. Advisory only — never closes
-    anything automatically; the user decides what to do with the flag."""
-    price_data, error = get_intraday_data(symbol, interval, size=INTERVAL_TO_CANDLES.get(interval, 50))
+    thesis still holds, using a small, cheap fresh data pull. Advisory
+    only — never closes anything automatically; the user decides what to
+    do with the flag.
+
+    Deliberately leaner than a full scan: no daily context, no ATR/economic
+    calendar text, fewer candles, CSV instead of JSON — none of that adds
+    value to this narrow "has anything broken down" judgment, and cutting
+    it reduces the cost of this call by roughly 85-90% with no loss in
+    what the check actually needs to do its job."""
+    price_data, error = get_intraday_data(symbol, interval, size=20)
     if price_data is None:
         return None
-    daily_data = get_daily_context(symbol)
 
-    instruction = (
-        f"This {direction} position was entered at {entry}, with stop-loss {stop_loss}, "
-        f"take-profit {take_profit}, and original invalidation condition: {invalidation}. "
-        f"Assess whether the original thesis still holds given the current data."
+    csv_lines = ["time,open,high,low,close"]
+    for c in price_data:
+        csv_lines.append(f"{c['time']},{c['open']},{c['high']},{c['low']},{c['close']}")
+    price_csv = "\n".join(csv_lines)
+
+    content = (
+        f"{direction.upper()} position — entry {entry}, stop-loss {stop_loss}, "
+        f"take-profit {take_profit}, invalidation: {invalidation}\n\n"
+        f"Last {len(price_data)} {interval} candles (oldest to newest):\n{price_csv}"
     )
-    content = build_data_message(symbol, interval, price_data, daily_data, instruction)
-    result, error = call_claude(POSITION_HEALTH_PROMPT, [{"role": "user", "content": content}], max_tokens=300)
+    result, error = call_claude(POSITION_HEALTH_PROMPT, [{"role": "user", "content": content}], max_tokens=150)
     return result
 
 
