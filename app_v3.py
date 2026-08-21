@@ -1152,12 +1152,14 @@ with tab_auto:
                 )
                 sig["triggered"] = is_triggered_now
 
-                # Position health check: only for signals that are triggered
-                # AND still open (not already stopped out or at target).
-                # Costs a real Claude call, so throttled to once every 5 min
-                # per signal rather than every fragment refresh.
+                # Position health check: off by default on every card. Only
+                # runs (costing a real Claude call, ~2-3c each) when both
+                # the switch below is turned on AND the position is
+                # actually triggered/open — never runs automatically.
                 is_still_open = is_triggered_now and entry_status and entry_status.startswith("▶")
-                if is_still_open:
+                sig.setdefault("health_check_enabled", False)
+
+                if is_still_open and sig["health_check_enabled"]:
                     sig_id = sig.get("id", sig["time"])
                     last_check = st.session_state.last_health_check_time.get(sig_id, 0)
                     if time.time() - last_check >= 300:  # 5 minutes
@@ -1198,6 +1200,12 @@ with tab_auto:
                             if s.get("id", s["time"]) != sig.get("id", sig["time"])
                         ]
                 with card_col:
+                    sig["health_check_enabled"] = st.toggle(
+                        "🔎 Live health checks (~2-3c per check, every 5 min)",
+                        value=sig["health_check_enabled"],
+                        key=f"health_toggle_{sig.get('id', sig['time'])}",
+                    )
+
                     health_html = ""
                     if sig.get("health_check"):
                         health_text = sig["health_check"]
