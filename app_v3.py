@@ -548,7 +548,7 @@ def get_sheet():
         return None
 
 
-def log_signal_to_sheet(symbol, scan_text):
+def log_signal_to_sheet(symbol, scan_text, interval=""):
     """Append a new signal row to the Google Sheet. Logging failures never
     interrupt scanning, but the error is saved for display."""
     sheet = get_sheet()
@@ -574,6 +574,8 @@ def log_signal_to_sheet(symbol, scan_text):
             take_profit,
             invalidation,
             "",  # Outcome — filled in later by you once the trade plays out
+            "",  # Notes — your column, filled in manually, left blank here
+            interval,
         ])
         st.session_state.last_sheet_error = None
     except Exception as e:
@@ -1081,7 +1083,7 @@ with tab_auto:
                                     "symbol": st.session_state.auto_symbol,
                                     "text": scan_text,
                                 })
-                                log_signal_to_sheet(st.session_state.auto_symbol, scan_text)
+                                log_signal_to_sheet(st.session_state.auto_symbol, scan_text, st.session_state.auto_interval)
                 st.session_state.last_auto_scan = time.time()
 
             if st.session_state.last_price is not None:
